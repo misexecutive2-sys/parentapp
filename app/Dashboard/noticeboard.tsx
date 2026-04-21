@@ -73,6 +73,8 @@ export default function StudentNoticeBoard() {
   const [childName, setChildName] = useState("Student");
   const [childId, setChildId] = useState<number | null>(null);
   const [filter, setFilter] = useState<string>("All");
+  const [childClass,   setChildClass]   = useState("—");
+const [childSection, setChildSection] = useState("—");
 
 const categories = [
   "All",
@@ -119,6 +121,8 @@ const categories = [
     if (child) {
       setChildName(child.name ?? "Student");
       setChildId(child.id ?? null);
+      setChildClass(child.classname ?? "—");
+      setChildSection(child.sectionname ?? "—");
     }
   };
 
@@ -174,24 +178,26 @@ const categories = [
     <SafeAreaView style={[styles.safe, { backgroundColor: theme.background }]}>
 
       {/* ══ HEADER ══ */}
-      <View style={[styles.headerTop, { backgroundColor: theme.primary }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Text style={styles.backArrow}>←</Text>
-        </TouchableOpacity>
-        <View style={styles.logoWrapper}>
-          <Image source={require("../../assets/logo.png")} style={styles.logo} />
-        </View>
-        <Text style={styles.headerTitle}>Welcome, {childName}</Text>
-        <Text style={styles.childSubtitle}>Child ID: {childId ?? "—"}</Text>
-        <View style={styles.actions}>
-          <TouchableOpacity style={styles.actionButton} onPress={() => router.push("/addchild")}>
-            <Text style={styles.actionText}>Switch Child</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton} onPress={handleLogout}>
-            <Text style={styles.actionText}>Logout</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+<View style={[styles.headerTop, { backgroundColor: theme.primary }]}>
+  <View style={styles.headerTopRow}>
+    <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+      <Text style={styles.backArrow}>↩</Text>
+    </TouchableOpacity>
+    <Text style={styles.headerTitle} numberOfLines={1}>Welcome, {childName}</Text>
+    <View style={styles.backBtn} />
+  </View>
+  <Text style={styles.childSubtitle}>
+    Class {childClass} · Section {childSection}
+  </Text>
+  <View style={styles.actions}>
+    <TouchableOpacity style={styles.actionButton} onPress={() => router.push("/addchild")}>
+      <Text style={styles.actionText}>Switch Child</Text>
+    </TouchableOpacity>
+    <TouchableOpacity style={styles.actionButton} onPress={handleLogout}>
+      <Text style={styles.actionText}>Logout</Text>
+    </TouchableOpacity>
+  </View>
+</View>
 
       {/* ══ BODY ══ */}
       <ScrollView
@@ -329,16 +335,15 @@ const styles = StyleSheet.create({
   centered: { alignItems: "center", justifyContent: "center", padding: 40 },
 
   // Header
-  headerTop: { paddingTop: 50, paddingBottom: 28, paddingHorizontal: 16, alignItems: "center" },
-  backBtn: { position: "absolute", top: 52, left: 16, zIndex: 10, padding: 4 },
-  backArrow: { color: "#fff", fontSize: 26, fontWeight: "bold" },
-  logoWrapper: { marginBottom: 14 },
-  logo: { width: 84, height: 84, resizeMode: "contain", borderRadius: 18, backgroundColor: "#fff" },
-  headerTitle: { color: "#fff", fontSize: 26, fontWeight: "800", textAlign: "center", marginBottom: 6 },
-  childSubtitle: { color: "rgba(255,255,255,0.85)", fontSize: 14, textAlign: "center", marginBottom: 20 },
+  headerTop: { paddingTop: 50, paddingBottom: 20, paddingHorizontal: 16, alignItems: "center" },
+  headerTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", width: "100%", marginBottom: 6 },
+  backBtn: { width: 36, padding: 4 },
+  backArrow: { color: "#fff", fontSize: 24, fontWeight: "bold" },
+  headerTitle: { color: "#fff", fontSize: 22, fontWeight: "800", textAlign: "center", flex: 1 },
+  childSubtitle: { color: "rgba(255,255,255,0.85)", fontSize: 14, textAlign: "center", marginBottom: 16 },
   actions: { flexDirection: "row", gap: 12 },
-  actionButton: { backgroundColor: "#fff", paddingVertical: 10, paddingHorizontal: 28, borderRadius: 10 },
-  actionText: { fontWeight: "700", fontSize: 14 },
+  actionButton: { backgroundColor: "#fff", paddingVertical: 10, paddingHorizontal: 24, borderRadius: 10 },
+  actionText: { fontWeight: "700", fontSize: 14, color: "#0047AB" },
 
   // Page title
   pageTitleRow: {
@@ -354,12 +359,7 @@ const styles = StyleSheet.create({
 
   // Filter chips
   chipsRow: { paddingHorizontal: 16, paddingBottom: 12, gap: 8 },
-  chip: {
-    paddingHorizontal: 16,
-    paddingVertical: 7,
-    borderRadius: 20,
-    borderWidth: 1,
-  },
+  chip: { paddingHorizontal: 16, paddingVertical: 7, borderRadius: 20, borderWidth: 1 },
   chipText: { fontSize: 13, fontWeight: "600" },
 
   // Notice card
@@ -372,20 +372,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E0E6F0",
   },
-  cardTopRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 4,
-  },
+  cardTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 4 },
   cardLeft: { flexDirection: "row", alignItems: "center", gap: 6 },
   categoryIcon: { fontSize: 18 },
   categoryText: { fontSize: 15, fontWeight: "700" },
-  priorityBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 20,
-  },
+  priorityBadge: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 20 },
   priorityText: { fontSize: 11, fontWeight: "700" },
   classText: { fontSize: 12, color: "#888", marginBottom: 10 },
   divider: { height: 0.5, backgroundColor: "#E0E6F0", marginBottom: 10 },

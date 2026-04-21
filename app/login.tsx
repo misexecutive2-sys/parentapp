@@ -41,11 +41,12 @@ const handleLogin = async () => {
           JSON.stringify({
             id: firstChild.id,
             name: firstChild.student_firstname,
-            class_name: firstChild.class_name,
-            section_name: firstChild.section_name,
+            classname: firstChild.class_name,
+            sectionname: firstChild.section_name,
           })
         );
         console.log("Saved child:", firstChild.student_firstname);
+     
       } else {
         console.warn("No children found for this account");
       }

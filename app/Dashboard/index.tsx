@@ -14,6 +14,8 @@ import { router, useLocalSearchParams } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Ionicons from "@expo/vector-icons/build/Ionicons";
 
+
+
 export default function DashboardScreen() {
   const { childId, childName, classname, sectionname } = useLocalSearchParams<{ childId: string; childName: string; classname: string ; sectionname :string }>();
 
@@ -90,11 +92,21 @@ export default function DashboardScreen() {
     if (childId && childName) {
       await AsyncStorage.setItem(
         "selectedChild",
-        JSON.stringify({ id: Number(childId), name: childName })
+        JSON.stringify({ id: childId, name: childName, classname, sectionname })
       );
     }
     router.replace("/addchild");
   };
+  useEffect(() => {
+  if (childId && childName && classname && sectionname) {
+    AsyncStorage.setItem("selectedChild", JSON.stringify({
+      id: childId,
+      name: childName,
+      classname: classname,
+      sectionname: sectionname,
+    }));
+  }
+}, [childId, childName, classname, sectionname]);
 
 return (
     <SafeAreaView style={styles.safe}>

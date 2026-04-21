@@ -1,0 +1,69 @@
+{
+  "attendance_calendar": [
+    {
+      "date": "2026-04-21",
+      "status": "P",
+      "id": "eqknjhXejMo"
+    },
+    {
+      "date": "2026-04-20",
+      "status": "A",
+      "id": "LMO3qG5n5Nc"
+    },
+    {
+      "date": "2026-04-19",
+      "status": "P",
+      "id": "8YXcULsbJBY"
+    },
+    {
+      "date": "2026-04-18",
+      "status": "P",
+      "id": "8YXcULsbJBY"
+    }
+  ],
+  "attendance_monthly": {
+    "total_days": 20,
+    "present": 15,
+    "absent": 2,
+    "leave": 1,
+    "holidays": 2,
+    "percentage": 75
+  },
+  "attendance_sessions": [
+    {
+      "date": "2026-04-21",
+      "session": "Morning",
+      "status": "P",
+      "id": "TquxDzx5elA"
+    },
+    {
+      "date": "2026-04-21",
+      "session": "Afternoon",
+      "status": "A",
+      "id": "xGDMbUaI5kY"
+    },
+    {
+      "date": "2026-04-19",
+      "session": "Afternoon",
+      "status": "A",
+      "id": "Fr5VwjDaqWQ"
+    }
+  ],
+  "attendance_leave_history": [
+    {
+      "id": "1",
+      "from_date": "2026-04-13",
+      "to_date": "2026-04-13",
+      "reason": "Fever",
+      "status": "Approved"
+    },
+    {
+      "from_date": "2026-04-25",
+      "to_date": "2026-04-27",
+      "reason": "I have a feaver",
+      "status": "Pending",
+      "id": "W4MP532K-8A"
+    }
+  ],
+  "$schema": "./node_modules/json-server/schema.json"
+}

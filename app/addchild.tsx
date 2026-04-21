@@ -151,8 +151,8 @@ export default function AddChildScreen() {
       JSON.stringify({
         id: item.id,
         name: item.student_firstname,
-        class_name: item.class_name,
-        section_name: item.section_name,
+        classname: item.class_name,
+        sectionname: item.section_name,
       })
     );
     router.replace({
@@ -184,7 +184,7 @@ export default function AddChildScreen() {
           contentContainerStyle={{ paddingBottom: 10 }}
           ListEmptyComponent={
             <View style={styles.emptyBox}>
-              <Text style={styles.emptyIcon}>👶</Text>
+              <Text style={styles.emptyIcon}>🧒</Text>
               <Text style={styles.emptyText}>
                 No children added yet.{"\n"}Add a child using their license key.
               </Text>
@@ -302,7 +302,7 @@ export default function AddChildScreen() {
                 )}
                 <Text style={styles.previewName}>{preview.student_name}</Text>
                 <Text style={styles.previewDetail}>
-                  {preview.class_name} · {preview.section_name}
+                  {preview.classname} · {preview.sectionname}
                 </Text>
                 <TouchableOpacity style={styles.button} onPress={handleAddChild} activeOpacity={0.85}>
                   <Text style={styles.buttonText}>✓ Add This Child</Text>

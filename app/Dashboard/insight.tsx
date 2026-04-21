@@ -143,33 +143,29 @@ return (
     <SafeAreaView style={styles.safe}>
 
       {/* ══ HEADER ══ */}
-      <View style={styles.header}>
-        <View style={styles.headerTop}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color="#fff" />
-          </TouchableOpacity>
-          <View style={styles.logoContainer}>
-            <Image source={require("../../assets/logo.png")} style={styles.logo} />
-          </View>
-          <View style={{ width: 24 }} />
-        </View>
-
-        <Text style={styles.headerTitle}>Welcome, {child?.name ?? "Child"}</Text>
-        <Text style={styles.headerSubtitle}>
-          Class: {child?.class_name ?? "-"} · Section {child?.section_name ?? "-"}
-        </Text>
-        <Text style={styles.headerSubtitle}>
-          Academic Year: {yearLabel ?? "-"}
-        </Text>
-          <View style={styles.actions}>
-                    <TouchableOpacity style={styles.actionButton} onPress={() => router.push("/addchild")}>
-                      <Text style={styles.actionText}>Switch Child</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.actionButton} onPress={handleLogout}>
-                      <Text style={styles.actionText}>Logout</Text>
-                    </TouchableOpacity>
-                  </View>
-      </View>
+<View style={styles.header}>
+  <View style={styles.headerTopRow}>
+    <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+      <Text style={styles.backArrow}>↩</Text>
+    </TouchableOpacity>
+    <Text style={styles.headerTitle} numberOfLines={1}>Welcome, {child?.name ?? "Child"}</Text>
+    <View style={styles.backBtn} />
+  </View>
+  <Text style={styles.headerSubtitle}>
+    Class: {child?.classname ?? "—"} · Section {child?.sectionname ?? "—"}
+  </Text>
+  <Text style={styles.headerSubtitle}>
+    Academic Year: {yearLabel ?? "—"}
+  </Text>
+  <View style={styles.actions}>
+    <TouchableOpacity style={styles.actionButton} onPress={() => router.push("/addchild")}>
+      <Text style={styles.actionText}>Switch Child</Text>
+    </TouchableOpacity>
+    <TouchableOpacity style={styles.actionButton} onPress={handleLogout}>
+      <Text style={styles.actionText}>Logout</Text>
+    </TouchableOpacity>
+  </View>
+</View>
 
       {/* ══ FILTER TOGGLE ══ */}
       <View style={styles.filterRow}>
@@ -303,20 +299,22 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#F5F7FA" },
 
   // Header
-  header: {
-    backgroundColor: "#0047AB",
-    paddingTop: 50,
-    paddingBottom: 24,
-    alignItems: "center",
-    paddingHorizontal: 20,
-  },
-  headerTop: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    width: "100%",
-    marginBottom: 12,
-  },
+header: {
+  backgroundColor: "#0047AB",
+  paddingTop: 50,
+  paddingBottom: 20,
+  paddingHorizontal: 16,
+  alignItems: "center",
+},
+headerTopRow: {
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "space-between",
+  width: "100%",
+  marginBottom: 6,
+},
+ backBtn: { width: 36, padding: 4 },
+backArrow: { color: "#fff", fontSize: 24, fontWeight: "bold" },
   backButton: { padding: 6 },
   logoContainer: {
     width: 80,
@@ -333,17 +331,19 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   logo: { width: "80%", height: "80%", resizeMode: "contain" },
-  headerTitle: {
-    color: "#ffffff",
-    fontSize: 24,
-    fontWeight: "800",
-    marginBottom: 4,
-  },
-  headerSubtitle: {
-    color: "rgba(255,255,255,0.8)",
-    fontSize: 13,
-    marginBottom: 5,
-  },
+headerTitle: {
+  color: "#fff",
+  fontSize: 22,
+  fontWeight: "800",
+  textAlign: "center",
+  flex: 1,
+},
+headerSubtitle: {
+  color: "rgba(255,255,255,0.85)",
+  fontSize: 13,
+  textAlign: "center",
+  marginBottom: 4,
+},
 
   // Filter toggle
   filterRow: {
@@ -414,7 +414,21 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: 18, fontWeight: "700", color: "#0047AB", marginBottom: 8 },
   emptySubtext: { fontSize: 13, color: "#888", textAlign: "center", lineHeight: 20 },
 
-    actions: { flexDirection: "row", gap: 12 },
-  actionButton: { backgroundColor: "#fff", paddingVertical: 10, paddingHorizontal: 28, borderRadius: 10 },
-  actionText: { fontWeight: "700", fontSize: 14 },
+actions: {
+  flexDirection: "row",
+  gap: 12,
+  marginTop: 12,
+},
+actionButton: {
+  backgroundColor: "#fff",
+  paddingVertical: 10,
+  paddingHorizontal: 24,
+  borderRadius: 10,
+},
+actionText: {
+  fontWeight: "700",
+  fontSize: 14,
+  color: "#0047AB",
+},
+
 });

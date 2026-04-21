@@ -91,6 +91,8 @@ export default function FeesScreen() {
   const [selectedFee, setSelectedFee] = useState<any>(null);
   const [showDetail, setShowDetail] = useState(false);
   const [paying, setPaying] = useState(false);
+  const [childClass,   setChildClass]   = useState("—");
+const [childSection, setChildSection] = useState("—");
 
   const filters = ["All", "Unpaid", "Paid", "Overdue"];
 
@@ -107,6 +109,8 @@ export default function FeesScreen() {
         setChildName(child.name ?? "Student");
         setChildId(child.id ?? null);
         setStudentId(child.id ?? null);
+        setChildClass(child.classname ?? "—");
+        setChildSection(child.sectionname ?? "—");
       }
 
       // ── TODO: Replace mock with real API ──
@@ -335,24 +339,26 @@ const handlePayNow = async (fee: any) => {
     <SafeAreaView style={[styles.safe, { backgroundColor: theme.background }]}>
 
       {/* ══ HEADER ══ */}
-      <View style={[styles.headerTop, { backgroundColor: theme.primary }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Text style={styles.backArrow}>←</Text>
-        </TouchableOpacity>
-        <View style={styles.logoWrapper}>
-          <Image source={require("../../assets/logo.png")} style={styles.logo} />
-        </View>
-        <Text style={styles.headerTitle}>Welcome, {childName}</Text>
-        <Text style={styles.childSubtitle}>Child ID: {childId ?? "—"}</Text>
-        <View style={styles.actions}>
-          <TouchableOpacity style={styles.actionButton} onPress={() => router.push("/addchild")}>
-            <Text style={styles.actionText}>Switch Child</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton} onPress={handleLogout}>
-            <Text style={styles.actionText}>Logout</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+<View style={[styles.headerTop, { backgroundColor: theme.primary }]}>
+  <View style={styles.headerTopRow}>
+    <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+      <Text style={styles.backArrow}>↩</Text>
+    </TouchableOpacity>
+    <Text style={styles.headerTitle} numberOfLines={1}>Welcome, {childName}</Text>
+    <View style={styles.backBtn} />
+  </View>
+  <Text style={styles.childSubtitle}>
+    Class {childClass} · Section {childSection}
+  </Text>
+  <View style={styles.actions}>
+    <TouchableOpacity style={styles.actionButton} onPress={() => router.push("/addchild")}>
+      <Text style={styles.actionText}>Switch Child</Text>
+    </TouchableOpacity>
+    <TouchableOpacity style={styles.actionButton} onPress={handleLogout}>
+      <Text style={styles.actionText}>Logout</Text>
+    </TouchableOpacity>
+  </View>
+</View>
 
       {loading ? (
         <View style={styles.centered}>
@@ -620,16 +626,16 @@ const styles = StyleSheet.create({
   centered: { flex: 1, alignItems: "center", justifyContent: "center" },
 
   // Header
-  headerTop: { paddingTop: 50, paddingBottom: 28, paddingHorizontal: 16, alignItems: "center" },
-  backBtn: { position: "absolute", top: 52, left: 16, zIndex: 10, padding: 4 },
-  backArrow: { color: "#fff", fontSize: 26, fontWeight: "bold" },
-  logoWrapper: { marginBottom: 14 },
-  logo: { width: 84, height: 84, resizeMode: "contain", borderRadius: 18, backgroundColor: "#fff" },
-  headerTitle: { color: "#fff", fontSize: 26, fontWeight: "800", textAlign: "center", marginBottom: 6 },
-  childSubtitle: { color: "rgba(255,255,255,0.85)", fontSize: 14, textAlign: "center", marginBottom: 20 },
-  actions: { flexDirection: "row", gap: 12 },
-  actionButton: { backgroundColor: "#fff", paddingVertical: 10, paddingHorizontal: 28, borderRadius: 10 },
-  actionText: { fontWeight: "700", fontSize: 14 },
+// Header
+headerTop: { paddingTop: 50, paddingBottom: 20, paddingHorizontal: 16, alignItems: "center" },
+headerTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", width: "100%", marginBottom: 6 },
+backBtn: { width: 36, padding: 4 },
+backArrow: { color: "#fff", fontSize: 24, fontWeight: "bold" },
+headerTitle: { color: "#fff", fontSize: 22, fontWeight: "800", textAlign: "center", flex: 1 },
+childSubtitle: { color: "rgba(255,255,255,0.85)", fontSize: 14, textAlign: "center", marginBottom: 16 },
+actions: { flexDirection: "row", gap: 12 },
+actionButton: { backgroundColor: "#fff", paddingVertical: 10, paddingHorizontal: 24, borderRadius: 10 },
+actionText: { fontWeight: "700", fontSize: 14, color: "#0047AB" },
 
   // Summary
   summaryRow: { flexDirection: "row", gap: 12, margin: 16 },

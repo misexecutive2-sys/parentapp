@@ -13,11 +13,13 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { useTheme } from "../ThemeContext";
+import { useFocusEffect } from "expo-router";
+import { useCallback } from "react";
 
 export default function SettingsScreen() {
   const router = useRouter();
   const { theme } = useTheme();
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  // const [notificationsEnabled, setNotificationsEnabled] = useState(true);
 
   const handleLogout = () =>
     Alert.alert("Logout", "Do you really want to logout?", [
@@ -37,7 +39,7 @@ export default function SettingsScreen() {
 
   const handleChangePassword = () => {
     // TODO: navigate to change password screen
-    router.push("/Dashboard/changepassword");
+    router.push("/Dashboard/changepasword");
   };
 
   const handleTerms = () => {
@@ -90,9 +92,9 @@ These Terms and Conditions will be applicable to YOU when YOU either procure the
         </View>
 
         {/* ── PREFERENCES SECTION ── */}
-        <Text style={[styles.sectionLabel, { color: theme.primary }]}>Preferences</Text>
+        {/* <Text style={[styles.sectionLabel, { color: theme.primary }]}>Preferences</Text> */}
 
-        <View style={styles.section}>
+        {/* <View style={styles.section}>
           <View style={styles.row}>
             <View style={styles.rowLeft}>
               <Text style={styles.rowIcon}>🔔</Text>
@@ -114,7 +116,7 @@ These Terms and Conditions will be applicable to YOU when YOU either procure the
               thumbColor="#fff"
             />
           </View>
-        </View>
+        </View> */}
 
         {/* ── LEGAL SECTION ── */}
         <Text style={[styles.sectionLabel, { color: theme.primary }]}>Legal</Text>
