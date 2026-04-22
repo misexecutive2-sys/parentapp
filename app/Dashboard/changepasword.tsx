@@ -17,14 +17,16 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { useTheme } from "../ThemeContext";
 
-const BASE_URL = "http://YOUR_SERVER_IP:5000"; // ← change this
+const BASE_URL = "https://staging.schoolaid.in"; // ← change this
 
 export default function ChangePasswordScreen() {
   const router = useRouter();
   const { theme } = useTheme();
+  
 
-  const [currentPassword, setCurrentPassword] = useState<string>("");
+  const [oldPassword, setOldPassword] = useState<string>("");
   const [newPassword, setNewPassword]         = useState<string>("");
+  const [user_id, setUserid]                   = useState<string>("");
   const [confirmPassword, setConfirmPassword] = useState<string>("");
   const [showCurrent, setShowCurrent]         = useState<boolean>(false);
   const [showNew, setShowNew]                 = useState<boolean>(false);
@@ -33,30 +35,31 @@ export default function ChangePasswordScreen() {
 
   const handleChangePassword = async (): Promise<void> => {
     // ── Validations ──────────────────────────
-    if (!currentPassword || !newPassword || !confirmPassword) {
+    if (!oldPassword || !newPassword || !confirmPassword) {
       return Alert.alert("Error", "Please fill in all fields.");
     }
-    if (newPassword.length < 8) {
-      return Alert.alert("Error", "New password must be at least 8 characters.");
-    }
+    // if (newPassword.length < 8) {
+    //   return Alert.alert("Error", "New password must be at least 8 characters.");
+    // }
     if (newPassword !== confirmPassword) {
       return Alert.alert("Error", "New password and confirm password do not match.");
     }
-    if (currentPassword === newPassword) {
-      return Alert.alert("Error", "New password must be different from current password.");
+    if (oldPassword === newPassword) {
+      return Alert.alert("Error", "New password must be different from old password.");
     }
 
     // ── Call API ─────────────────────────────
     setLoading(true);
     try {
       const token = await AsyncStorage.getItem("token");
-      const res = await fetch(`${BASE_URL}/api/settings/change-password`, {
+      const userId = await AsyncStorage.getItem("user_id");
+      const res = await fetch(`${BASE_URL}/api/login/change-password`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ currentPassword, newPassword }),
+        body: JSON.stringify({ oldPassword, newPassword , user_id: userId}),
       });
 
       const data = await res.json();
@@ -107,8 +110,8 @@ export default function ChangePasswordScreen() {
                 placeholder="Enter current password"
                 placeholderTextColor="#aaa"
                 secureTextEntry={!showCurrent}
-                value={currentPassword}
-                onChangeText={setCurrentPassword}
+                value={oldPassword}
+                onChangeText={setOldPassword}
                 autoCapitalize="none"
               />
             </View>
@@ -126,7 +129,7 @@ export default function ChangePasswordScreen() {
               <Text style={[styles.inputLabel, { color: theme.primary }]}>New Password</Text>
               <TextInput
                 style={[styles.input, { color: theme.text }]}
-                placeholder="Min. 8 characters"
+                placeholder="Enter new password"
                 placeholderTextColor="#aaa"
                 secureTextEntry={!showNew}
                 value={newPassword}

@@ -187,7 +187,7 @@ const categories = [
     <View style={styles.backBtn} />
   </View>
   <Text style={styles.childSubtitle}>
-    Class {childClass} · Section {childSection}
+    Class : {childClass} · Section : {childSection}
   </Text>
   <View style={styles.actions}>
     <TouchableOpacity style={styles.actionButton} onPress={() => router.push("/addchild")}>

@@ -214,12 +214,12 @@ export default function AttendanceScreen() {
       <View style={[styles.headerTop, { backgroundColor: PRIMARY }]}>
         <View style={styles.headerTopRow}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <Text style={styles.backArrow}>{"<"}</Text>
+            <Text style={styles.backArrow}>{"↩"}</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle} numberOfLines={1}>Welcome, {childName}</Text>
           <View style={styles.backBtn} />
         </View>
-        <Text style={styles.childSubtitle}>Class {childClass} {"\u00B7"} Section {childSection}</Text>
+        <Text style={styles.childSubtitle}>Class : {childClass} {"\u00B7"} Section : {childSection}</Text>
         <View style={styles.headerBtns}>
           <TouchableOpacity style={styles.headerBtn} onPress={() => router.push("/addchild")}>
             <Text style={styles.headerBtnText}>Switch Child</Text>
