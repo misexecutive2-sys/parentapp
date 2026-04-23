@@ -413,7 +413,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 
-const API_URL = "https://staging.schoolaid.in";
+const API_URL = "https://connect.schoolaid.in";
 
 export default function SignupScreen() {
   const { tempToken } = useLocalSearchParams();
@@ -427,7 +427,11 @@ export default function SignupScreen() {
       const res = await fetch(`${API_URL}/api/create-account`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mobile, password, tempToken })
+        body: JSON.stringify({ 
+        mobile: `+91${mobile}`,  // ← add this
+        password, 
+        tempToken 
+        })
       });
 
       const data = await res.json();

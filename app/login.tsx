@@ -4,7 +4,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { useTheme } from "./ThemeContext";
 
-const API_URL = "https://staging.schoolaid.in";
+const API_URL = "https://connect.schoolaid.in";
 
 export default function LoginScreen() {
   const [mobile, setMobile] = useState("");
@@ -17,16 +17,20 @@ const handleLogin = async () => {
     const res = await fetch(`${API_URL}/api/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mobile, password }),
+      body: JSON.stringify({ 
+        mobile: `+91${mobile}`,   // ✅ add prefix here
+        password 
+      }),
     });
 
     const data = await res.json();
-    console.log("Login API response:", data);
+console.log("Status:", res.status);        // ← add this
+console.log("Response:", JSON.stringify(data)); // ← add this
 
     if (res.ok) {
       await AsyncStorage.setItem("token", data.token);
 
-      // ✅ Login gives no child, so fetch children list immediately
+      // ✅ Fetch children list immediately
       const childRes = await fetch(`${API_URL}/api/add-child/my-children`, {
         headers: { Authorization: `Bearer ${data.token}` },
       });
@@ -35,7 +39,6 @@ const handleLogin = async () => {
 
       if (childData.children && childData.children.length > 0) {
         const firstChild = childData.children[0];
-        // ✅ Save first child — same shape as addchild.tsx handleSelectChild
         await AsyncStorage.setItem(
           "selectedChild",
           JSON.stringify({
@@ -46,7 +49,6 @@ const handleLogin = async () => {
           })
         );
         console.log("Saved child:", firstChild.student_firstname);
-     
       } else {
         console.warn("No children found for this account");
       }
@@ -60,9 +62,6 @@ const handleLogin = async () => {
     Alert.alert("Error", "Network issue");
   }
 };
-
-
- 
     const handleForgotPassword = async () => {
     try {
       const res = await fetch(`${API_URL}/api/login/forgot`, {

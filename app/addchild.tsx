@@ -15,7 +15,7 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 
-const API_URL = "https://staging.schoolaid.in";
+const API_URL = "https://connect.schoolaid.in";
 
 export default function AddChildScreen() {
   const router = useRouter();
