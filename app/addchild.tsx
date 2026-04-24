@@ -34,38 +34,38 @@ export default function AddChildScreen() {
     if (res.ok) setChildren(data.children);
   };
 
-  const handleDeleteChild = async (childId: number, childName: string) => {
-  Alert.alert(
-    "Remove Child",
-    `Are you sure you want to remove ${childName} from your account?`,
-    [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Remove",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            const token = await AsyncStorage.getItem("token");
-            const res = await fetch(`${API_URL}/api/add-child/${childId}`, {
-              method: "DELETE",
-              headers: { Authorization: `Bearer ${token}` },
-            });
-            const data = await res.json();
-            if (res.ok) {
-              Alert.alert("Success", data.msg ?? "Child removed successfully");
-              fetchChildren(); // ✅ refresh list
-            } else {
-              Alert.alert("Error", data.msg ?? "Could not remove child");
-            }
-          } catch (err) {
-            Alert.alert("Error", "Network issue. Please try again.");
-          }
-        },
-      },
-    ],
-    { cancelable: true }
-  );
-};
+//   const handleDeleteChild = async (childId: number, childName: string) => {
+//   Alert.alert(
+//     "Remove Child",
+//     `Are you sure you want to remove ${childName} from your account?`,
+//     [
+//       { text: "Cancel", style: "cancel" },
+//       {
+//         text: "Remove",
+//         style: "destructive",
+//         onPress: async () => {
+//           try {
+//             const token = await AsyncStorage.getItem("token");
+//             const res = await fetch(`${API_URL}/api/add-child/${childId}`, {
+//               method: "DELETE",
+//               headers: { Authorization: `Bearer ${token}` },
+//             });
+//             const data = await res.json();
+//             if (res.ok) {
+//               Alert.alert("Success", data.msg ?? "Child removed successfully");
+//               fetchChildren(); // ✅ refresh list
+//             } else {
+//               Alert.alert("Error", data.msg ?? "Could not remove child");
+//             }
+//           } catch (err) {
+//             Alert.alert("Error", "Network issue. Please try again.");
+//           }
+//         },
+//       },
+//     ],
+//     { cancelable: true }
+//   );
+// };
 
   useEffect(() => {
     fetchChildren();
@@ -87,7 +87,32 @@ export default function AddChildScreen() {
     ]);
   };
 
-  const handlePreview = async () => {
+  // const handlePreview = async () => {
+  //   if (!license) {
+  //     Alert.alert("Error", "Enter license key");
+  //     return;
+  //   }
+  //   const token = await AsyncStorage.getItem("token");
+  //   const res = await fetch(`${API_URL}/api/add-child/preview-child`, {
+  //     method: "POST",
+  //     headers: {
+  //       "Content-Type": "application/json",
+  //       Authorization: `Bearer ${token}`,
+  //     },
+  //     body: JSON.stringify({ license }),
+  //   });
+  //   const text = await res.text();
+  //   try {
+  //     const data = JSON.parse(text);
+  //     // if (res.ok) setPreview(data.student);
+  //     if (res.ok) setPreview(data.student || data.child || data.data || data);
+  //     else Alert.alert("Error", data.msg);
+  //   } catch (e) {
+  //     Alert.alert("Error", "Server returned an unexpected response");
+  //   }
+  //   console.log("Preview student:", preview);
+  // };
+const handlePreview = async () => {
     if (!license) {
       Alert.alert("Error", "Enter license key");
       return;
@@ -101,16 +126,34 @@ export default function AddChildScreen() {
       },
       body: JSON.stringify({ license }),
     });
+
+    console.log("=== PREVIEW DEBUG ===");
+    console.log("Status:", res.status, "| OK:", res.ok);
+
     const text = await res.text();
+    console.log("Raw Response:", text);
+
     try {
       const data = JSON.parse(text);
-      if (res.ok) setPreview(data.student);
-      else Alert.alert("Error", data.msg);
+      console.log("Parsed Data:", JSON.stringify(data, null, 2));
+      console.log("data.student:", data.student);
+      console.log("data.child:", data.child);
+      console.log("data.data:", data.data);
+
+      if (res.ok) {
+        const student = data.student || data.child || data.data || data;
+        console.log("Final student being set:", JSON.stringify(student, null, 2));
+        setPreview(student);
+      } else {
+        console.log("Error msg from server:", data.msg);
+        Alert.alert("Error", data.msg);
+      }
     } catch (e) {
+      console.log("JSON Parse Error:", e);
+      console.log("Raw text was:", text);
       Alert.alert("Error", "Server returned an unexpected response");
     }
   };
-
   const handleAddChild = async () => {
     const token = await AsyncStorage.getItem("token");
     const res = await fetch(`${API_URL}/api/add-child`, {
@@ -218,37 +261,33 @@ export default function AddChildScreen() {
           renderItem={({ item }) => (
   <View style={styles.card}>
     {/* Left — avatar + info — tappable to select */}
-    <TouchableOpacity
-      style={styles.cardLeft}
-      onPress={() => handleSelectChild(item)}
-      activeOpacity={0.85}
-    >
-      {item.profile_image ? (
-        <Image source={{ uri: item.profile_image }} style={styles.avatarImage} />
-      ) : (
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>
-            {item.student_firstname?.charAt(0).toUpperCase()}
-          </Text>
-        </View>
-      )}
-      <View style={styles.cardInfo}>
-        <Text style={styles.name}>{item.student_firstname}</Text>
-        <Text style={styles.detail}>
-          {item.class_name} · Section{" "}
-          <Text style={styles.sectionBadge}>{item.section_name}</Text>
-        </Text>
-      </View>
-    </TouchableOpacity>
+  <TouchableOpacity
+  style={styles.cardLeft}
+  onPress={() => handleSelectChild(item)}
+  activeOpacity={0.85}
+>
+  <View style={styles.avatar}>
+    <Text style={styles.avatarText}>
+      {item.student_firstname?.charAt(0).toUpperCase()}
+    </Text>
+  </View>
+  <View style={styles.cardInfo}>
+    <Text style={styles.name}>{item.student_firstname}</Text>
+    <Text style={styles.detail}>
+      {item.class_name} · Section{" "}
+      <Text style={styles.sectionBadge}>{item.section_name}</Text>
+    </Text>
+  </View>
+</TouchableOpacity>
 
     {/* Right — delete button */}
-    <TouchableOpacity
+    {/* <TouchableOpacity
       style={styles.deleteBtn}
       onPress={() => handleDeleteChild(item.id, item.student_firstname)}
       activeOpacity={0.7}
     >
       <Text style={styles.deleteIcon}>🗑</Text>
-    </TouchableOpacity>
+    </TouchableOpacity> */}
   </View>
 )}
         />
@@ -287,28 +326,31 @@ export default function AddChildScreen() {
                   <Text style={styles.buttonText}>Preview Child</Text>
                 </TouchableOpacity>
               </>
-            ) : (
-              <>
-                <Text style={styles.modalTitle}>Confirm Child</Text>
-                <Text style={styles.modalSubtitle}>Is this the correct child profile?</Text>
-                {preview.profile_image ? (
-                  <Image source={{ uri: preview.profile_image }} style={styles.previewImg} />
-                ) : (
-                  <View style={styles.previewAvatar}>
-                    <Text style={styles.previewAvatarText}>
-                      {preview.student_name?.charAt(0).toUpperCase()}
-                    </Text>
-                  </View>
-                )}
-                <Text style={styles.previewName}>{preview.student_name}</Text>
-                <Text style={styles.previewDetail}>
-                  {preview.classname} · {preview.sectionname}
-                </Text>
-                <TouchableOpacity style={styles.button} onPress={handleAddChild} activeOpacity={0.85}>
-                  <Text style={styles.buttonText}>✓ Add This Child</Text>
-                </TouchableOpacity>
-              </>
-            )}
+) : (
+  <>
+    <Text style={styles.modalTitle}>Confirm Child</Text>
+    <Text style={styles.modalSubtitle}>Is this the correct child profile?</Text>
+    {preview.profile_pic ? (
+      <Image
+        source={{ uri: `${API_URL}${preview.profile_pic}` }} // ✅ full URL
+        style={styles.previewImg}
+      />
+    ) : (
+      <View style={styles.previewAvatar}>
+        <Text style={styles.previewAvatarText}>
+          {preview.student_firstname?.charAt(0).toUpperCase()} // ✅ correct field
+        </Text>
+      </View>
+    )}
+      <Text style={styles.previewName}>{preview.student_firstname}</Text>
+      <Text style={styles.previewDetail}>
+        {`${preview.class_name ?? "N/A"} · ${preview.section_name ?? "N/A"}`}
+      </Text>
+    <TouchableOpacity style={styles.button} onPress={handleAddChild} activeOpacity={0.85}>
+      <Text style={styles.buttonText}>✓ Add This Child</Text>
+    </TouchableOpacity>
+  </>
+)}
             <TouchableOpacity style={styles.cancelBtn} onPress={handleCloseModal} activeOpacity={0.7}>
               <Text style={styles.cancelText}>Cancel</Text>
             </TouchableOpacity>

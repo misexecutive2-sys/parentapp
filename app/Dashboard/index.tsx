@@ -39,26 +39,78 @@ export default function DashboardScreen() {
   }, []);
   
 
-  const fetchYears = async () => {
-    try {
-      const token = await AsyncStorage.getItem("token");
-      const res = await fetch(
-        "https://staging.schoolaid.in/api/app/financial-years",
-        { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" } }
-      );
-      const data = await res.json();
-      const arr = Array.isArray(data) ? data : data.data ?? [];
-      setYears(arr);
-      if (arr.length > 0) {
-        setSelectedYearId(arr[0].id);
-        // ✅ Save default year to AsyncStorage so all screens can read it
-        await AsyncStorage.setItem("selectedYearId", String(arr[0].id));
-        await AsyncStorage.setItem("selectedYearLabel", arr[0].year ?? String(arr[0].id));
-      }
-    } catch (err) {
-      console.error("Failed to fetch years:", err);
+  // const fetchYears = async () => {
+  //   try {
+  //     const token = await AsyncStorage.getItem("token");
+  //     console.log("Fetching years with token:", token);
+  //     const res = await fetch(
+  //       "https://connect.schoolaid.in/api/app/financial-years",
+  //       { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" } }
+  //     );
+  //     const data = await res.json();
+  //     const arr = Array.isArray(data) ? data : data.data ?? [];
+  //     setYears(arr);
+  //     if (arr.length > 0) {
+  //       setSelectedYearId(arr[0].id);
+  //       // ✅ Save default year to AsyncStorage so all screens can read it
+  //       await AsyncStorage.setItem("selectedYearId", String(arr[0].id));
+  //       await AsyncStorage.setItem("selectedYearLabel", arr[0].year ?? String(arr[0].id));
+  //     }
+  //   } catch (err) {
+  //     console.error("Failed to fetch years:", err);
+  //   }
+  // };
+
+// const fetchYears = async () => {
+//   try {
+//     const token = await AsyncStorage.getItem("token");
+//     console.log("Token:", token); // 👈
+//     const res = await fetch(
+//       "https://connect.schoolaid.in/api/app/financial-years",
+//       { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" } }
+//     );
+//     console.log("Years status:", res.status); // 👈
+//     const data = await res.json();
+//     console.log("Years data:", JSON.stringify(data, null, 2)); // 👈
+//     const arr = Array.isArray(data) ? data : data.data ?? [];
+//     console.log("Years array:", arr); // 👈
+//     setYears(arr);
+//     if (arr.length > 0) {
+//       setSelectedYearId(arr[0].id);
+//       await AsyncStorage.setItem("selectedYearId", String(arr[0].id));
+//       await AsyncStorage.setItem("selectedYearLabel", arr[0].year ?? String(arr[0].id));
+//     }
+//   } catch (err) {
+//     console.error("Failed to fetch years:", err);
+//   }
+// };
+const fetchYears = async () => {
+  try {
+    const token = await AsyncStorage.getItem("token");
+    console.log("=== YEARS DEBUG ===");
+    console.log("Token:", token);
+    
+    const res = await fetch(
+      "https://connect.schoolaid.in/api/app/financial-years",
+      { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" } }
+    );
+    console.log("Years status:", res.status);
+    const data = await res.json();
+    console.log("Years response:", JSON.stringify(data, null, 2));
+    
+    const arr = Array.isArray(data) ? data : data.data ?? [];
+    console.log("Years array length:", arr.length);
+    setYears(arr);
+    if (arr.length > 0) {
+      setSelectedYearId(arr[0].id);
+      await AsyncStorage.setItem("selectedYearId", String(arr[0].id));
+      await AsyncStorage.setItem("selectedYearLabel", arr[0].year ?? String(arr[0].id));
     }
-  };
+  } catch (err) {
+    console.error("Failed to fetch years:", err);
+  }
+};
+
 
   // ── When parent changes year, save it globally ────────
   const handleYearChange = async (yearId: number) => {

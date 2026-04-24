@@ -541,32 +541,56 @@ const [sectionName, setSectionName] = useState<string | null>(null);
     loadChildAndFetchYears();
   }, []);
 
-  const loadChildAndFetchYears = async () => {
-    try {
-      setLoading(true);
-      const childRaw = await AsyncStorage.getItem("selectedChild");
-      const child = childRaw ? JSON.parse(childRaw) : null;
-      if (child) {
-        setChildName(child.name ?? "Student");
-        setChildId(child.id ?? null);
-        setStudentId(child.id ?? null);
-         setClassName(child.classname ?? null);   
-      setSectionName(child.sectionname ?? null); 
-      }
+  // const loadChildAndFetchYears = async () => {
+  //   try {
+  //     setLoading(true);
+  //     const childRaw = await AsyncStorage.getItem("selectedChild");
+  //     const child = childRaw ? JSON.parse(childRaw) : null;
+  //     if (child) {
+  //       setChildName(child.name ?? "Student");
+  //       setChildId(child.id ?? null);
+  //       setStudentId(child.id ?? null);
+  //        setClassName(child.classname ?? null);   
+  //     setSectionName(child.sectionname ?? null); 
+  //     }
 
-      // ✅ Read year set by dashboard
-      const savedYearId = await AsyncStorage.getItem("selectedYearId");
-      if (savedYearId) {
-        setSelectedYearId(Number(savedYearId));
-      }
-    } catch {
-      Alert.alert("Error", "Could not load data");
-    } finally {
-      setLoading(false);
-    }
-  };
+  //     // ✅ Read year set by dashboard
+  //     const savedYearId = await AsyncStorage.getItem("selectedYearId");
+  //     if (savedYearId) {
+  //       setSelectedYearId(Number(savedYearId));
+  //     }
+  //   } catch {
+  //     Alert.alert("Error", "Could not load data");
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
 
   // ✅ Trigger fetchExams when both selectedYearId and studentId are ready
+  
+  const loadChildAndFetchYears = async () => {
+  try {
+    setLoading(true);
+    const childRaw = await AsyncStorage.getItem("selectedChild");
+    const child = childRaw ? JSON.parse(childRaw) : null;
+    if (child) {
+      setChildName(child.name ?? "Student");
+      setChildId(child.id ?? null);
+      setStudentId(child.id ?? null);
+      setClassName(child.classname ?? null);
+      setSectionName(child.sectionname ?? null);
+    }
+
+    const savedYearId = await AsyncStorage.getItem("selectedYearId");
+    // ✅ fallback to 8 if API is broken
+    setSelectedYearId(savedYearId ? Number(savedYearId) : 8);
+
+  } catch {
+    Alert.alert("Error", "Could not load data");
+  } finally {
+    setLoading(false);
+  }
+};
   useEffect(() => {
     if (selectedYearId && studentId) fetchExams(selectedYearId);
   }, [selectedYearId, studentId]);
@@ -583,18 +607,19 @@ const [sectionName, setSectionName] = useState<string | null>(null);
       const child = childRaw ? JSON.parse(childRaw) : null;
 
       const res = await fetch(
-        "https://staging.schoolaid.in/api/app/student-exams",
+        "https://connect.schoolaid.in/api/app/student-exams",
         {
           method: "POST",
           headers: {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
-            "x-academic-year": "5", // ✅ uses dashboard year
+            "x-academic-year": "8", // ✅ uses dashboard year
           },
           body: JSON.stringify({ student_id: child?.id }),
         }
       );
       const data = await res.json();
+      console.log("Exams response:", data);
       const arr = Array.isArray(data.exams) ? data.exams : [];
       setExams(arr);
       if (arr.length > 0) setSelectedExamId(arr[0].id);
