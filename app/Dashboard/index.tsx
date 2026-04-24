@@ -29,7 +29,7 @@ export default function DashboardScreen() {
     { title: "Exam", icon: "📝", route: "/Dashboard/exam" },
     { title: "School Diary", icon: "📓", route: "/Dashboard/schooldiary" },
     { title: "Insights & Analysis", icon: "📊", route: "/Dashboard/insight" },
-    { title: "Study", icon: "📚", route: "/Dashboard/study" },
+    // { title: "Study", icon: "📚", route: "/Dashboard/study" },
     {title: "Fees", icon: "💰", route: "/Dashboard/fees" },
   ];
 

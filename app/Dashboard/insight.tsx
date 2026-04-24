@@ -51,7 +51,7 @@ export default function InsightScreen() {
     try {
       const token = await AsyncStorage.getItem("token");
       const res = await fetch(
-        `https://staging.schoolaid.in/api/app/subjects?child_id=${child?.id}&year_id=${yearId}`,
+        `https://connect.schoolaid.in/api/app/subjects?child_id=${child?.id}&year_id=${yearId}`,
         { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" } }
       );
       const data = await res.json();
@@ -62,29 +62,57 @@ export default function InsightScreen() {
   };
 
   // ── Fetch exams ───────────────────────────────────────
+  // const fetchExams = async () => {
+  //   try {
+  //     const token = await AsyncStorage.getItem("token");
+  //     const res = await fetch(
+  //       "https://connect.schoolaid.in/api/app/student-exams",
+  //       {
+  //         method: "POST",
+  //         headers: {
+  //           Authorization: `Bearer ${token}`,
+  //           "Content-Type": "application/json",
+  //           "x-academic-year": "8",
+  //         },
+  //         body: JSON.stringify({ student_id: child?.id }),
+  //       }
+  //     );
+  //     const data = await res.json();
+  //     const arr = Array.isArray(data.exams) ? data.exams : [];
+  //     setExams(arr);
+  //     if (arr.length > 0) setSelectedExamId(arr[0].id);
+  //   } catch (err) {
+  //     console.error("Failed to fetch exams:", err);
+  //   }
+  // };
+
   const fetchExams = async () => {
-    try {
-      const token = await AsyncStorage.getItem("token");
-      const res = await fetch(
-        "https://staging.schoolaid.in/api/app/student-exams",
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-            "x-academic-year": "5",
-          },
-          body: JSON.stringify({ student_id: child?.id }),
-        }
-      );
-      const data = await res.json();
-      const arr = Array.isArray(data.exams) ? data.exams : [];
-      setExams(arr);
-      if (arr.length > 0) setSelectedExamId(arr[0].id);
-    } catch (err) {
-      console.error("Failed to fetch exams:", err);
-    }
-  };
+  try {
+    const token = await AsyncStorage.getItem("token");
+    const yearId = await AsyncStorage.getItem("selectedYearId"); // ✅ read from AsyncStorage
+    console.log("Fetching exams with yearId:", yearId, "studentId:", child?.id);
+
+    const res = await fetch(
+      "https://connect.schoolaid.in/api/app/student-exams",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          "x-academic-year": yearId ?? "8", // ✅ dynamic, fallback to 8
+        },
+        body: JSON.stringify({ student_id: child?.id }),
+      }
+    );
+    const data = await res.json();
+    console.log("Exams response:", data);
+    const arr = Array.isArray(data.exams) ? data.exams : [];
+    setExams(arr);
+    if (arr.length > 0) setSelectedExamId(arr[0].id);
+  } catch (err) {
+    console.error("Failed to fetch exams:", err);
+  }
+};
 
   // ------------- logout -------------
     const handleLogout = () =>
