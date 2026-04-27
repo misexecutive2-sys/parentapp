@@ -213,13 +213,15 @@ return (
                 selectedValue={selectedYearId}
                 onValueChange={(val) => handleYearChange(val)}
                 style={styles.yearPicker}
-                dropdownIconColor="#0047AB"
+                dropdownIconColor="#fdfdfd"
+                 itemStyle={{ color: "#ffffff" }}
               >
                 {years.map((yr) => (
                   <Picker.Item
                     key={yr.id}
                     label={yr.year ?? String(yr.id)}
                     value={yr.id}
+                    color="#000000"
                   />
                 ))}
               </Picker>
@@ -313,27 +315,30 @@ const styles = StyleSheet.create({
   },
 
   // Year Picker
-  yearPickerWrapper: {
-    width: "100%",
-    marginBottom: 14,
+ yearPickerWrapper: {
+  flexDirection: "row",         // ✅ horizontal — label + picker side by side
+  alignItems: "center",
+  marginBottom: 10,
+  gap: 8,
+},
+yearPickerLabel: {
+  color: "rgba(255,255,255,0.85)",
+  fontSize: 12,
+  fontWeight: "600",
 
-  },
-  yearPickerLabel: {
-    color: "rgba(255,255,255,0.85)",
-    fontSize: 12,
-    fontWeight: "600",
-    marginBottom: 4,
-    textAlign: "center",
-  },
-  yearPickerBox: {
-    backgroundColor: "#ffffff",
-    borderRadius: 10,
-    overflow: "hidden",
-  },
-  yearPicker: {
-    height: 50,
-    color: "#0047AB",
-  },
+},
+yearPickerBox: {
+  backgroundColor: "rgba(255,255,255,0.15)",  // ✅ transparent, fits header
+  borderRadius: 8,
+  overflow: "hidden",
+  borderWidth: 1,
+  borderColor: "rgba(255,255,255,0.3)",
+},
+yearPicker: {
+  height: 32,       // ✅ was 50, now compact
+  width: 150,       // ✅ fixed small width
+  color: "#ffffff", // ✅ white text to match header
+},
 
   // Buttons
   headerButtons: { flexDirection: "row", gap: 10 },

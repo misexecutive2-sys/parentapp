@@ -438,7 +438,7 @@ export default function SignupScreen() {
 
       if (res.ok) {
         Alert.alert("Success", data.msg);
-        router.replace("/login");
+        router.push("/login");
       } else {
         Alert.alert("Error", data.msg);
       }
