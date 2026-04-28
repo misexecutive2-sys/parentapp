@@ -309,6 +309,7 @@ import { useRouter } from "expo-router";
 import { useTheme } from "./ThemeContext";
 import { Buffer } from "buffer";
 
+
 const API_URL = "https://connect.schoolaid.in";
 
 // ✅ SECURITY: Keys as constants to avoid typos and centralise key management
@@ -334,7 +335,7 @@ export default function LoginScreen() {
   const [loginAttempts, setLoginAttempts] = useState(0); // ✅ Rate limiting
   const [lockoutUntil, setLockoutUntil] = useState(null); // ✅ Lockout timer
   const router = useRouter();
-  const { theme } = useTheme();
+// const { primaryColor } = useTheme()
 
   // ✅ SECURITY: Ref to clear sensitive fields on app background
   const appStateRef = useRef(AppState.currentState);
@@ -654,6 +655,8 @@ These Terms and Conditions will be applicable to YOU when YOU either procure the
 }
 
 const styles = StyleSheet.create({
+
+  
   container: {
     flex: 1,
     backgroundColor: '#0047AB',

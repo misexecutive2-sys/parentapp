@@ -216,7 +216,7 @@ const handleChangePassword = async (): Promise<void> => {
       console.log("Parsed response:", data);
 
       if (res.ok) {
-        Alert.alert("Success ✅", "Your password has been changed successfully.", [
+        Alert.alert("Success ", "Your password has been changed successfully.", [
           { text: "OK", onPress: () => router.back() },
         ]);
       } else {
@@ -236,7 +236,7 @@ const handleChangePassword = async (): Promise<void> => {
       {/* ══ HEADER ══ */}
       <View style={[styles.headerTop, { backgroundColor: theme.primary }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Text style={styles.backArrow}>←</Text>
+          <Text style={styles.backArrow}>↩</Text>
         </TouchableOpacity>
         <View style={styles.logoWrapper}>
           <Image source={require("../../assets/logo.png")} style={styles.logo} />

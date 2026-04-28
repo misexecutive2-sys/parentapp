@@ -181,7 +181,8 @@ export default function AttendanceScreen() {
           return (
             <View key={day} style={[
               styles.calendarCell,
-              { backgroundColor: isFiltered ? "#f9f9f9" : s.bg, borderColor: isFiltered ? "#eee" : s.border },
+              { backgroundColor: isFiltered ? "#f9f9f9" : s.bg, 
+                borderColor: isFiltered ? "#eee" : s.border },
               isToday && !isFiltered && styles.todayCell,
               isFiltered && { opacity: 0.25 },
             ]}>

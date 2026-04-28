@@ -63,7 +63,7 @@ These Terms and Conditions will be applicable to YOU when YOU either procure the
       {/* ══ HEADER ══ */}
       <View style={[styles.headerTop, { backgroundColor: theme.primary }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Text style={styles.backArrow}>←</Text>
+          <Text style={styles.backArrow}>↩</Text>
         </TouchableOpacity>
         <View style={styles.logoWrapper}>
           <Image source={require("../../assets/logo.png")} style={styles.logo} />
