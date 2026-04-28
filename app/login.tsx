@@ -307,6 +307,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SecureStore from "expo-secure-store"; // ✅ Encrypted storage for passwords
 import { useRouter } from "expo-router";
 import { useTheme } from "./ThemeContext";
+import { Buffer } from "buffer";
 
 const API_URL = "https://connect.schoolaid.in";
 
@@ -447,8 +448,16 @@ export default function LoginScreen() {
           return;
         }
 
-        await AsyncStorage.setItem(STORAGE_KEYS.TOKEN, data.token);
+await AsyncStorage.setItem(STORAGE_KEYS.TOKEN, data.token);
 
+// ✅ Decode JWT payload without atob (React Native compatible)
+const base64Payload = data.token.split(".")[1];
+const paddedPayload = base64Payload + "==".slice((base64Payload.length % 4) || 4); // fix padding
+const decodedPayload = JSON.parse(
+  Buffer.from(paddedPayload, "base64").toString("utf8")
+);
+console.log("Decoded token:", decodedPayload); // { user_id: 64, role: "parent", ... }
+await AsyncStorage.setItem("user_id", String(decodedPayload.user_id));
         // ✅ Save or clear credentials based on rememberMe
         if (rememberMe) {
           await AsyncStorage.setItem(STORAGE_KEYS.REMEMBER_ME, "true");

@@ -17,7 +17,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { useTheme } from "../ThemeContext";
 
-const BASE_URL = "https://staging.schoolaid.in"; // ← change this
+const BASE_URL = "https://connect.schoolaid.in"; // ← change this
 
 export default function ChangePasswordScreen() {
   const router = useRouter();
@@ -33,14 +33,149 @@ export default function ChangePasswordScreen() {
   const [showConfirm, setShowConfirm]         = useState<boolean>(false);
   const [loading, setLoading]                 = useState<boolean>(false);
 
-  const handleChangePassword = async (): Promise<void> => {
-    // ── Validations ──────────────────────────
+  // const handleChangePassword = async (): Promise<void> => {
+  //   // ── Validations ──────────────────────────
+  //   if (!oldPassword || !newPassword || !confirmPassword) {
+  //     return Alert.alert("Error", "Please fill in all fields.");
+  //   }
+  //   // if (newPassword.length < 8) {
+  //   //   return Alert.alert("Error", "New password must be at least 8 characters.");
+  //   // }
+  //   if (newPassword !== confirmPassword) {
+  //     return Alert.alert("Error", "New password and confirm password do not match.");
+  //   }
+  //   if (oldPassword === newPassword) {
+  //     return Alert.alert("Error", "New password must be different from old password.");
+  //   }
+
+  //   // ── Call API ─────────────────────────────
+  //   setLoading(true);
+  //   try {
+  //     const token = await AsyncStorage.getItem("token");
+  //     const userId = await AsyncStorage.getItem("user_id");
+  //     const res = await fetch(`${BASE_URL}/api/login/change-password`, {
+  //       method: "POST",
+  //       headers: {
+  //         "Content-Type": "application/json",
+  //         Authorization: `Bearer ${token}`,
+  //       },
+  //       body: JSON.stringify({ oldPassword, newPassword , user_id: userId}),
+  //     });
+
+  //     const data = await res.json();
+
+  //     if (data.success) {
+  //       Alert.alert("Success ✅", "Your password has been changed successfully.", [
+  //         { text: "OK", onPress: () => router.back() },
+  //       ]);
+  //     } else {
+  //       Alert.alert("Failed", data.message || "Something went wrong.");
+  //     }
+  //   } catch (err) {
+  //     Alert.alert("Error", "Network error. Please try again.");
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
+
+
+// const handleChangePassword = async (): Promise<void> => {
+//     if (!oldPassword || !newPassword || !confirmPassword) {
+//       return Alert.alert("Error", "Please fill in all fields.");
+//     }
+//     if (newPassword !== confirmPassword) {
+//       return Alert.alert("Error", "New password and confirm password do not match.");
+//     }
+//     if (oldPassword === newPassword) {
+//       return Alert.alert("Error", "New password must be different from old password.");
+//     }
+
+//     setLoading(true);
+
+//     try {
+//       const userId = await AsyncStorage.getItem("user_id");
+
+//       // ── Debug logs — check these in terminal ──
+//       console.log("BASE_URL:", BASE_URL);
+//       console.log("user_id:", userId);
+//       console.log("Payload:", { oldPassword, newPassword, user_id: userId });
+
+//       const res = await fetch(`${BASE_URL}/api/login/change-password`, {
+//         method: "PATCH",
+//         headers: {
+//           "Content-Type": "application/json",  // ✅ needed so server reads body as JSON
+//         },
+//         body: JSON.stringify({ oldPassword, newPassword, user_id: userId }),
+//       });
+
+//       console.log("Response status:", res.status);
+//       const data = await res.json();
+//       console.log("Response data:", data);
+
+//       if (data.success) {
+//         Alert.alert("Success ✅", "Your password has been changed successfully.", [
+//           { text: "OK", onPress: () => router.back() },
+//         ]);
+//       } else {
+//         Alert.alert("Failed", data.message || "Something went wrong.");
+//       }
+//     } catch (err) {
+//       console.log("Catch error:", err);  // ✅ this will tell you the real error
+//       Alert.alert("Error", "Network error. Please try again.");
+//     } finally {
+//       setLoading(false);
+//     }
+//   };
+
+// const handleChangePassword = async (): Promise<void> => {
+//     if (!oldPassword || !newPassword || !confirmPassword) {
+//       return Alert.alert("Error", "Please fill in all fields.");
+//     }
+//     if (newPassword !== confirmPassword) {
+//       return Alert.alert("Error", "New password and confirm password do not match.");
+//     }
+//     if (oldPassword === newPassword) {
+//       return Alert.alert("Error", "New password must be different from old password.");
+//     }
+
+//     setLoading(true);
+
+//     try {
+//       const userId = await AsyncStorage.getItem("user_id");
+
+//       const res = await fetch(`${BASE_URL}/api/login/change-password`, {
+//         method: "PATCH",
+//         headers: {
+//           "Content-Type": "application/json",
+//         },
+//         body: JSON.stringify({ 
+//           oldPassword, 
+//           newPassword, 
+//           user_id: Number(userId)  // ✅ send as number not string
+// }),
+//       });
+
+//       const data = await res.json();
+//       console.log("Response status:", res.status);
+
+//       if (res.ok) {  // ✅ check status 200, not data.success (API returns data.msg not data.success)
+//         Alert.alert("Success ✅", "Your password has been changed successfully.", [
+//           { text: "OK", onPress: () => router.back() },
+//         ]);
+//       } else {
+//         Alert.alert("Failed", data.msg || "Something went wrong."); // ✅ data.msg not data.message
+//       }
+//     } catch (err) {
+//       Alert.alert("Error", "Network error. Please try again.");
+//     } finally {
+//       setLoading(false);
+//     }
+//   };
+  
+const handleChangePassword = async (): Promise<void> => {
     if (!oldPassword || !newPassword || !confirmPassword) {
       return Alert.alert("Error", "Please fill in all fields.");
     }
-    // if (newPassword.length < 8) {
-    //   return Alert.alert("Error", "New password must be at least 8 characters.");
-    // }
     if (newPassword !== confirmPassword) {
       return Alert.alert("Error", "New password and confirm password do not match.");
     }
@@ -48,36 +183,53 @@ export default function ChangePasswordScreen() {
       return Alert.alert("Error", "New password must be different from old password.");
     }
 
-    // ── Call API ─────────────────────────────
     setLoading(true);
+
     try {
-      const token = await AsyncStorage.getItem("token");
       const userId = await AsyncStorage.getItem("user_id");
+
+      // ── Debug logs ──
+      console.log("=== CHANGE PASSWORD ===");
+      console.log("user_id from storage:", userId);
+      console.log("user_id as number:", Number(userId));
+      console.log("oldPassword:", oldPassword);
+      console.log("newPassword:", newPassword);
+      console.log("Payload being sent:", { oldPassword, newPassword, user_id: Number(userId) });
+
       const res = await fetch(`${BASE_URL}/api/login/change-password`, {
-        method: "POST",
+        method: "PATCH",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ oldPassword, newPassword , user_id: userId}),
+        body: JSON.stringify({ 
+          oldPassword, 
+          newPassword, 
+          user_id: Number(userId)
+        }),
       });
 
-      const data = await res.json();
+      console.log("Response status:", res.status);
+      const text = await res.text(); // ✅ read as text first to avoid JSON crash
+      console.log("Raw response:", text);
 
-      if (data.success) {
+      const data = JSON.parse(text); // ✅ then parse manually
+      console.log("Parsed response:", data);
+
+      if (res.ok) {
         Alert.alert("Success ✅", "Your password has been changed successfully.", [
           { text: "OK", onPress: () => router.back() },
         ]);
       } else {
-        Alert.alert("Failed", data.message || "Something went wrong.");
+        Alert.alert("Failed", data.msg || "Something went wrong.");
       }
     } catch (err) {
+      console.log("=== CATCH ERROR ===");
+      console.log(err);
       Alert.alert("Error", "Network error. Please try again.");
     } finally {
       setLoading(false);
     }
   };
-
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: theme.background }]}>
 
