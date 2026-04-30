@@ -31,6 +31,7 @@ export default function DashboardScreen() {
     { title: "Insights & Analysis", icon: "📊", route: "/Dashboard/insight" },
     // { title: "Study", icon: "📚", route: "/Dashboard/study" },
     {title: "Fees", icon: "💰", route: "/Dashboard/fees" },
+    { title: "Message Teacher", icon: "💬", route: "/Dashboard/message" },
   ];
 
   // ── Fetch financial years on mount ───────────────────
@@ -183,7 +184,18 @@ return (
           <View style={{ width: 44 }} />
         </View> */}
         <View style={styles.headerTopRow}>
-  <View style={{ width: 44 }} />  {/* spacer left */}
+  {/* <View style={{ width: 44 }} />   */}
+
+  <TouchableOpacity
+  style={styles.settingsBtn}
+  onPress={() => router.push({
+    pathname: "/Dashboard/message",
+    params: { childId, childName }
+  })}
+  activeOpacity={0.85}
+>
+  <Ionicons name="chatbubble-ellipses-outline" size={24} color="#fff" />
+</TouchableOpacity>
 
   <View style={styles.logoContainer}>
     <Image source={require("../../assets/logo.png")} style={styles.logo} />
