@@ -421,6 +421,8 @@ export default function SignupScreen() {
 
   const [mobile, setMobile] = useState('');
   const [password, setPassword] = useState('');
+  const [whatsappOptIn, setWhatsappOptIn] = useState(false);
+  
 
   const handleSignup = async () => {
     try {
@@ -481,6 +483,19 @@ export default function SignupScreen() {
             onChangeText={setPassword}
           />
         </View>
+          <TouchableOpacity
+          style={styles.checkboxRow}
+          onPress={() => setWhatsappOptIn(!whatsappOptIn)}
+          activeOpacity={0.7}
+        >
+          <View style={[styles.checkbox, whatsappOptIn && styles.checkboxChecked]}>
+            {whatsappOptIn && <Text style={styles.checkmark}>✓</Text>}
+          </View>
+          <Text style={styles.checkboxLabel}>
+            I agree to receive school updates & notifications on{" "}
+            <Text style={styles.whatsappText}>WhatsApp</Text> 
+          </Text>
+        </TouchableOpacity>
 
         <TouchableOpacity style={styles.button} onPress={handleSignup} activeOpacity={0.85}>
           <Text style={styles.buttonText}>Create Account</Text>
@@ -589,4 +604,39 @@ prefixText: {
     color: '#0047AB',
     fontWeight: '700',
   },
+  checkboxRow: {
+  flexDirection: "row",
+  alignItems: "flex-start",
+  width: "100%",
+  marginBottom: 16,
+  gap: 10,
+},
+checkbox: {
+  width: 22,
+  height: 22,
+  borderRadius: 6,
+  borderWidth: 2,
+  borderColor: "#0047AB",
+  alignItems: "center",
+  justifyContent: "center",
+  marginTop: 1,
+},
+checkboxChecked: {
+  backgroundColor: "#0047AB",
+},
+checkmark: {
+  color: "#fff",
+  fontSize: 13,
+  fontWeight: "800",
+},
+checkboxLabel: {
+  flex: 1,
+  fontSize: 13,
+  color: "#555",
+  lineHeight: 20,
+},
+whatsappText: {
+  color: "#25D366",
+  fontWeight: "700",
+},
 });

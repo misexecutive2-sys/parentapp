@@ -40,28 +40,6 @@ export default function DashboardScreen() {
   }, []);
   
 
-  // const fetchYears = async () => {
-  //   try {
-  //     const token = await AsyncStorage.getItem("token");
-  //     console.log("Fetching years with token:", token);
-  //     const res = await fetch(
-  //       "https://connect.schoolaid.in/api/app/financial-years",
-  //       { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" } }
-  //     );
-  //     const data = await res.json();
-  //     const arr = Array.isArray(data) ? data : data.data ?? [];
-  //     setYears(arr);
-  //     if (arr.length > 0) {
-  //       setSelectedYearId(arr[0].id);
-  //       // ✅ Save default year to AsyncStorage so all screens can read it
-  //       await AsyncStorage.setItem("selectedYearId", String(arr[0].id));
-  //       await AsyncStorage.setItem("selectedYearLabel", arr[0].year ?? String(arr[0].id));
-  //     }
-  //   } catch (err) {
-  //     console.error("Failed to fetch years:", err);
-  //   }
-  // };
-
 // const fetchYears = async () => {
 //   try {
 //     const token = await AsyncStorage.getItem("token");
@@ -217,29 +195,29 @@ return (
         </Text>
 
         {/* ── Year Picker ── */}
-        {years.length > 0 && (
-          <View style={styles.yearPickerWrapper}>
-            <Text style={styles.yearPickerLabel}>Academic Year</Text>
-            <View style={styles.yearPickerBox}>
-              <Picker
-                selectedValue={selectedYearId}
-                onValueChange={(val) => handleYearChange(val)}
-                style={styles.yearPicker}
-                dropdownIconColor="#fdfdfd"
-                 itemStyle={{ color: "#ffffff" }}
-              >
-                {years.map((yr) => (
-                  <Picker.Item
-                    key={yr.id}
-                    label={yr.year ?? String(yr.id)}
-                    value={yr.id}
-                    color="#000000"
-                  />
-                ))}
-              </Picker>
-            </View>
-          </View>
-        )}
+{years.length > 0 && (
+  <View style={styles.yearPickerWrapper}>
+    <Text style={styles.yearPickerLabel}>Academic Year</Text>
+    <View style={styles.yearPickerBox}>
+      <Picker
+        selectedValue={selectedYearId}
+        onValueChange={(val) => handleYearChange(val)}
+        style={styles.yearPicker}
+        dropdownIconColor="#0047AB"
+        mode="dropdown"
+      >
+        {years.map((yr) => (
+          <Picker.Item
+            key={yr.id}
+            label={yr.year ?? String(yr.id)}
+            value={yr.id}
+            color="#0047AB"
+          />
+        ))}
+      </Picker>
+    </View>
+  </View>
+)}
 
         {/* ── Buttons row ── */}
         <View style={styles.headerButtons}>
@@ -270,10 +248,17 @@ return (
           <TouchableOpacity
             key={idx}
             style={styles.card}
+              // ✅ FIXED
             onPress={() =>
               router.push({
                 pathname: mod.route,
-                params: { yearId: selectedYearId },
+                params: { 
+                  yearId: selectedYearId,
+                  childId: childId,
+                  childName: childName,
+                  classname: classname,
+                  sectionname: sectionname,
+                },
               })
             }
             activeOpacity={0.85}
@@ -327,8 +312,8 @@ const styles = StyleSheet.create({
   },
 
   // Year Picker
- yearPickerWrapper: {
-  flexDirection: "row",         // ✅ horizontal — label + picker side by side
+yearPickerWrapper: {
+  flexDirection: "row",
   alignItems: "center",
   marginBottom: 10,
   gap: 8,
@@ -337,19 +322,20 @@ yearPickerLabel: {
   color: "rgba(255,255,255,0.85)",
   fontSize: 12,
   fontWeight: "600",
-
 },
 yearPickerBox: {
-  backgroundColor: "rgba(255,255,255,0.15)",  // ✅ transparent, fits header
+  backgroundColor: "#ffffff",   // ✅ white bg — dark text always visible
   borderRadius: 8,
-  overflow: "hidden",
   borderWidth: 1,
-  borderColor: "rgba(255,255,255,0.3)",
+  borderColor: "rgba(255,255,255,0.6)",
+  height: 36,
+  overflow: "hidden",
 },
 yearPicker: {
-  height: 32,       // ✅ was 50, now compact
-  width: 150,       // ✅ fixed small width
-  color: "#ffffff", // ✅ white text to match header
+  height: 50,
+  width: 140,
+  color: "#0047AB", 
+  marginTop: -6            
 },
 
   // Buttons

@@ -1864,7 +1864,7 @@ export default function AttendanceScreen() {
 
 
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
     <SafeAreaView style={styles.safe}>
