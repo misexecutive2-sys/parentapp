@@ -500,22 +500,22 @@ const CommentCard = ({
 // ════════════════════════════════════════════
 //  EMPTY STATE
 // ════════════════════════════════════════════
-const EmptyState = ({ tab }: { tab: "homework" | "comments" | "all" }) => (
+const EmptyState = ({ tab }: { tab: "homework" | "comment" | "all" }) => (
   <View style={styles.emptyWrapper}>
     <Text style={styles.emptyEmoji}>
-      {tab === "homework" ? "📭" : tab === "comments" ? "💭" : "🎉"}
+      {tab === "homework" ? "📭" : tab === "comment" ? "💭" : "🎉"}
     </Text>
     <Text style={styles.emptyTitle}>
       {tab === "homework"
         ? "No Homework Yet"
-        : tab === "comments"
+        : tab === "comment"
         ? "No Comments Yet"
         : "You're all caught up!"}
     </Text>
     <Text style={styles.emptySubtitle}>
       {tab === "homework"
         ? "Your teacher hasn't assigned any homework yet."
-        : tab === "comments"
+        : tab === "comment"
         ? "No teacher comments for you yet."
         : "Pull down to refresh and check for new updates."}
     </Text>
@@ -539,7 +539,7 @@ export default function SchoolDiaryScreen() {
   const [completedIds,  setCompletedIds]  = useState<Set<string>>(new Set());
   const [loading,       setLoading]       = useState<boolean>(true);
   const [refreshing,    setRefreshing]    = useState<boolean>(false);
-  const [activeTab,     setActiveTab]     = useState<"all" | "homework" | "comments">("all");
+  const [activeTab,     setActiveTab]     = useState<"all" | "homework" | "comment">("all");
 
   const unreadCount   = notifications.filter((n) => !n.read).length;
   const homeworkItems = notifications.filter((n) => n.type === "homework");
@@ -640,16 +640,19 @@ export default function SchoolDiaryScreen() {
 
         const data = await res.json();
         const rawList: any[] = data.success
+        
           ? data.data
           : Array.isArray(data)
           ? data
           : [];
+          // right after const rawList line, add:
+console.log("RAW TYPES:", rawList.map(n => n.type));
 
         setNotifications((prev) => {
           const readIds = new Set(prev.filter((n) => n.read).map((n) => n.id));
           return rawList.map((n: any) => ({
             id:         String(n.id ?? n._id ?? Math.random()),
-            type:       n.type === "comment" ? "comment" : "homework",
+            type: (n.type === "comment" || n.type === "" && (n.comment != null || !n.due_date && !n.dueDate)) ? "comment" : "homework",
             title:      n.title      ?? n.homework_title ?? "Untitled",
             body:       n.body       ?? n.description    ?? n.comment ?? "",
             subject:    n.subject    ?? n.subject_name   ?? "General",
@@ -740,7 +743,7 @@ export default function SchoolDiaryScreen() {
 
       {/* TABS */}
       <View style={styles.tabsRow}>
-        {(["all", "homework", "comments"] as const).map((tab) => (
+        {(["all", "homework", "comment"] as const).map((tab) => (
           <TouchableOpacity
             key={tab}
             onPress={() => setActiveTab(tab)}
@@ -755,7 +758,7 @@ export default function SchoolDiaryScreen() {
                 ? "All"
                 : tab === "homework"
                 ? "📚 Homework"
-                : "💬 Comments"}
+                : "💬 Comment"}
             </Text>
           </TouchableOpacity>
         ))}
