@@ -419,6 +419,7 @@ import {
   Alert,
   SafeAreaView,
   Modal,
+  StatusBar,
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
 import { router, useLocalSearchParams } from "expo-router";
@@ -526,30 +527,38 @@ export default function DashboardScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
+      <StatusBar barStyle="light-content" backgroundColor={PRIMARY} />
 
       {/* ── HEADER ── */}
       <View style={styles.header}>
 
-        {/* Top bar */}
+        {/* Top bar — school name + year pill + menu */}
         <View style={styles.topBar}>
-          <View style={styles.logoBox}>
-            <Image source={require("../../assets/logo.png")} style={styles.logo} />
-          </View>
-          <View style={styles.topBarCenter}>
+          <View style={styles.topBarLeft}>
             <Text style={styles.schoolLabel}>School Aid</Text>
-            {selectedYearLabel ? (
-              <View style={styles.yearPill}>
-                <Ionicons name="calendar-outline" size={10} color="rgba(255,255,255,0.85)" />
-                <Text style={styles.yearPillText}>{selectedYearLabel}</Text>
-              </View>
-            ) : null}
+            <Text style={styles.subLabel}>Parent Portal</Text>
           </View>
-          <TouchableOpacity style={styles.menuBtn} onPress={() => setSidebarOpen(true)} activeOpacity={0.8}>
-            <Ionicons name="menu-outline" size={24} color="#fff" />
+
+          <View style={{ flex: 1 }} />
+
+          {/* Year pill lives here — no impact on child card */}
+          {selectedYearLabel ? (
+            <View style={styles.yearPill}>
+              <Ionicons name="calendar-outline" size={10} color="rgba(255,255,255,0.9)" />
+              <Text style={styles.yearPillText}>{selectedYearLabel}</Text>
+            </View>
+          ) : null}
+
+          <TouchableOpacity
+            style={styles.menuBtn}
+            onPress={() => setSidebarOpen(true)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="menu-outline" size={22} color="#fff" />
           </TouchableOpacity>
         </View>
 
-        {/* Child info card — floats over the curved bottom */}
+        {/* Child card — fixed height, never grows */}
         <View style={styles.childCard}>
           <View style={styles.childAvatarWrap}>
             <View style={styles.childAvatar}>
@@ -560,16 +569,18 @@ export default function DashboardScreen() {
 
           <View style={styles.childInfo}>
             <Text style={styles.greetingText}>{getGreeting()} 👋</Text>
-            <Text style={styles.childName}>{childName}</Text>
+            <Text style={styles.childName} numberOfLines={1} ellipsizeMode="tail">
+              {childName}
+            </Text>
             <View style={styles.badgeRow}>
               <View style={styles.infoBadge}>
-                <Ionicons name="school-outline" size={11} color={PRIMARY} />
+                <Ionicons name="school-outline" size={10} color={PRIMARY} />
                 <Text style={styles.infoBadgeText}>Class {classname}</Text>
               </View>
               <Text style={styles.badgeDot}>·</Text>
               <View style={styles.infoBadge}>
-                <Ionicons name="layers-outline" size={11} color={PRIMARY} />
-                <Text style={styles.infoBadgeText}>Section {sectionname}</Text>
+                <Ionicons name="layers-outline" size={10} color={PRIMARY} />
+                <Text style={styles.infoBadgeText}>Sec {sectionname}</Text>
               </View>
             </View>
           </View>
@@ -579,14 +590,17 @@ export default function DashboardScreen() {
             onPress={() => navigateTo("/Dashboard/noticeboard")}
             activeOpacity={0.8}
           >
-            <Ionicons name="notifications-outline" size={20} color={PRIMARY} />
+            <Ionicons name="notifications-outline" size={18} color={PRIMARY} />
           </TouchableOpacity>
         </View>
 
       </View>
 
       {/* ── MODULE GRID ── */}
-      <ScrollView contentContainerStyle={styles.grid} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.grid}
+        showsVerticalScrollIndicator={false}
+      >
         {modules.map((mod, idx) => (
           <TouchableOpacity
             key={idx}
@@ -603,23 +617,57 @@ export default function DashboardScreen() {
       </ScrollView>
 
       {/* ── SIDEBAR DRAWER ── */}
-      <Modal visible={sidebarOpen} transparent animationType="fade" onRequestClose={() => setSidebarOpen(false)}>
+      <Modal
+        visible={sidebarOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSidebarOpen(false)}
+      >
         <View style={styles.overlay}>
-          <TouchableOpacity style={styles.overlayBg} onPress={() => setSidebarOpen(false)} activeOpacity={1} />
+          <TouchableOpacity
+            style={styles.overlayBg}
+            onPress={() => setSidebarOpen(false)}
+            activeOpacity={1}
+          />
           <View style={styles.sidebar}>
 
             <View style={styles.sbHeader}>
-              <View style={styles.sbAvatarCircle}>
-                <Text style={styles.sbAvatarText}>{getInitials(childName ?? "")}</Text>
+
+              {/* Logo + brand */}
+              <View style={styles.sbLogoRow}>
+                <View style={styles.sbLogoBox}>
+                  <Image
+                    source={require("../../assets/logo.png")}
+                    style={styles.sbLogo}
+                  />
+                </View>
+                <Text style={styles.sbBrandName}>School Aid</Text>
+                <TouchableOpacity
+                  style={styles.sbClose}
+                  onPress={() => setSidebarOpen(false)}
+                >
+                  <Ionicons name="close-outline" size={20} color="rgba(255,255,255,0.85)" />
+                </TouchableOpacity>
               </View>
-              <Text style={styles.sbName}>{childName}</Text>
-              <Text style={styles.sbMeta}>Class {classname} · Section {sectionname}</Text>
-              <TouchableOpacity style={styles.sbClose} onPress={() => setSidebarOpen(false)}>
-                <Ionicons name="close-outline" size={22} color="rgba(255,255,255,0.8)" />
-              </TouchableOpacity>
+
+              <View style={styles.sbDivider} />
+
+              {/* Child info */}
+              <View style={styles.sbChildRow}>
+                <View style={styles.sbAvatarCircle}>
+                  <Text style={styles.sbAvatarText}>{getInitials(childName ?? "")}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.sbName} numberOfLines={1}>{childName}</Text>
+                  <Text style={styles.sbMeta}>Class {classname} · Sec {sectionname}</Text>
+                </View>
+              </View>
+
             </View>
 
             <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+
+              {/* Academic year */}
               <View style={styles.sbSection}>
                 <Text style={styles.sbSectionLabel}>ACADEMIC YEAR</Text>
                 {years.length > 0 && (
@@ -632,47 +680,60 @@ export default function DashboardScreen() {
                       mode="dropdown"
                     >
                       {years.map((yr) => (
-                        <Picker.Item key={yr.id} label={yr.year ?? String(yr.id)} value={yr.id} color={PRIMARY} />
+                        <Picker.Item
+                          key={yr.id}
+                          label={yr.year ?? String(yr.id)}
+                          value={yr.id}
+                          color={PRIMARY}
+                        />
                       ))}
                     </Picker>
                   </View>
                 )}
               </View>
 
+              {/* Quick links */}
               <View style={styles.sbSection}>
                 <Text style={styles.sbSectionLabel}>QUICK LINKS</Text>
 
-                <TouchableOpacity style={styles.sbItem} onPress={() => { setSidebarOpen(false); navigateTo("/Dashboard/message"); }}>
+                <TouchableOpacity
+                  style={styles.sbItem}
+                  onPress={() => { setSidebarOpen(false); navigateTo("/Dashboard/message"); }}
+                >
                   <View style={[styles.sbItemIcon, { backgroundColor: "#E3F2FD" }]}>
-                    <Ionicons name="chatbubble-ellipses-outline" size={18} color="#1565C0" />
+                    <Ionicons name="chatbubble-ellipses-outline" size={16} color="#1565C0" />
                   </View>
                   <Text style={styles.sbItemLabel}>Message Teacher</Text>
-                  <Ionicons name="chevron-forward-outline" size={16} color="#ccc" />
+                  <Ionicons name="chevron-forward-outline" size={15} color="#ccc" />
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.sbItem} onPress={() => { setSidebarOpen(false); router.push("/Dashboard/setting"); }}>
+                <TouchableOpacity
+                  style={styles.sbItem}
+                  onPress={() => { setSidebarOpen(false); router.push("/Dashboard/setting"); }}
+                >
                   <View style={[styles.sbItemIcon, { backgroundColor: "#F3E5F5" }]}>
-                    <Ionicons name="settings-outline" size={18} color="#6A1B9A" />
+                    <Ionicons name="settings-outline" size={16} color="#6A1B9A" />
                   </View>
                   <Text style={styles.sbItemLabel}>Settings</Text>
-                  <Ionicons name="chevron-forward-outline" size={16} color="#ccc" />
+                  <Ionicons name="chevron-forward-outline" size={15} color="#ccc" />
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.sbItem} onPress={handleSwitchChild}>
                   <View style={[styles.sbItemIcon, { backgroundColor: "#E8F5E9" }]}>
-                    <Ionicons name="people-outline" size={18} color="#2E7D32" />
+                    <Ionicons name="people-outline" size={16} color="#2E7D32" />
                   </View>
                   <Text style={styles.sbItemLabel}>Switch Child</Text>
-                  <Ionicons name="chevron-forward-outline" size={16} color="#ccc" />
+                  <Ionicons name="chevron-forward-outline" size={15} color="#ccc" />
                 </TouchableOpacity>
               </View>
 
+              {/* Logout */}
               <TouchableOpacity style={styles.sbLogout} onPress={handleLogout}>
-                <Ionicons name="log-out-outline" size={20} color="#C62828" />
+                <Ionicons name="log-out-outline" size={18} color="#C62828" />
                 <Text style={styles.sbLogoutText}>Logout</Text>
               </TouchableOpacity>
-            </ScrollView>
 
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -684,74 +745,67 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#F0F4FF" },
 
-  // ── Header ──
-header: {
-  backgroundColor: PRIMARY,
-  paddingTop: 6,          // ← reduced from 12/20
-  paddingHorizontal: 16,
-  paddingBottom: 24,      // ← reduced from 32
-  borderBottomLeftRadius: 32,
-  borderBottomRightRadius: 32,
-  elevation: 8,
-  shadowColor: PRIMARY,
-  shadowOffset: { width: 0, height: 6 },
-  shadowOpacity: 0.35,
-  shadowRadius: 16,
-},
+  // ── Header — total height is now fixed and predictable ──
+  header: {
+    backgroundColor: PRIMARY,
+    paddingTop: 8,
+    paddingHorizontal: 14,
+    paddingBottom: 16,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    elevation: 8,
+    shadowColor: PRIMARY,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 14,
+  },
 
-topBar: {
-  flexDirection: "row",
-  alignItems: "center",
-  marginBottom: 14,       // ← reduced from 22
-},
-logoBox: {
-  width: 46,
-  height: 46,
-  borderRadius: 13,
-  backgroundColor: "#fff",
-  alignItems: "center",
-  justifyContent: "center",
-  overflow: "visible",      // ← was "hidden", this was clipping your logo
-  elevation: 3,
-  shadowColor: "#000",
-  shadowOffset: { width: 0, height: 2 },
-  shadowOpacity: 0.12,
-  shadowRadius: 4,
-},
-  logo: { width: 38, height: 38, resizeMode: "contain" },
-  topBarCenter: {
-    flex: 1,
-    paddingHorizontal: 12,
+  // Top bar
+  topBar: {
     flexDirection: "row",
     alignItems: "center",
+    marginBottom: 12,
     gap: 8,
+  },
+  topBarLeft: {
+    flexDirection: "column",
   },
   schoolLabel: {
     color: "#fff",
-    fontSize: 18,
-    fontWeight: "800",
+    fontSize: 20,
+    fontWeight: "900",
     letterSpacing: 0.3,
   },
+  subLabel: {
+    color: "rgba(255,255,255,0.6)",
+    fontSize: 10,
+    fontWeight: "500",
+    letterSpacing: 0.5,
+    marginTop: 1,
+  },
+
+  // Year pill — in topbar, not in child card
   yearPill: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 3,
+    gap: 4,
     backgroundColor: "rgba(255,255,255,0.18)",
     borderRadius: 20,
     paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingVertical: 5,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.25)",
   },
   yearPillText: {
-    color: "rgba(255,255,255,0.92)",
+    color: "#fff",
     fontSize: 10,
     fontWeight: "700",
   },
+
   menuBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 13,
+    width: 38,
+    height: 38,
+    borderRadius: 11,
     backgroundColor: "rgba(255,255,255,0.15)",
     alignItems: "center",
     justifyContent: "center",
@@ -759,63 +813,69 @@ logoBox: {
     borderColor: "rgba(255,255,255,0.2)",
   },
 
-  // Child card
-childCard: {
-  backgroundColor: "#fff",
-  borderRadius: 20,
-  padding: 12,            // ← reduced from 16
-  flexDirection: "row",
-  alignItems: "center",
-  gap: 12,                // ← reduced from 14
-  elevation: 4,
-  shadowColor: "#000",
-  shadowOffset: { width: 0, height: 3 },
-  shadowOpacity: 0.12,
-  shadowRadius: 10,
-},
+  // Child card — FIXED height so it NEVER grows
+  childCard: {
+    backgroundColor: "#fff",
+    borderRadius: 18,
+    height: 70,              // fixed — nothing can change this
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    overflow: "hidden",      // clips anything that tries to overflow
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+  },
   childAvatarWrap: { position: "relative" },
-childAvatar: {
-  width: 46,              // ← reduced from 54
-  height: 46,             // ← reduced from 54
-  borderRadius: 23,
-  backgroundColor: "#E8F0FE",
-  borderWidth: 2,
-  borderColor: PRIMARY,
-  alignItems: "center",
-  justifyContent: "center",
-},
-childAvatarText: { color: PRIMARY, fontSize: 16, fontWeight: "900" },  // ← fontSize reduced
-  // childAvatarText: { color: PRIMARY, fontSize: 19, fontWeight: "900" },
+  childAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#E8F0FE",
+    borderWidth: 2,
+    borderColor: PRIMARY,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  childAvatarText: { color: PRIMARY, fontSize: 15, fontWeight: "900" },
   onlineDot: {
     position: "absolute",
     bottom: 1,
     right: 1,
-    width: 13,
-    height: 13,
-    borderRadius: 7,
+    width: 11,
+    height: 11,
+    borderRadius: 6,
     backgroundColor: "#22C55E",
     borderWidth: 2,
     borderColor: "#fff",
   },
-  childInfo: { flex: 1 },
+  childInfo: { flex: 1, overflow: "hidden" },
   greetingText: { fontSize: 10, color: "#9CA3AF", fontWeight: "500", marginBottom: 1 },
-childName: { fontSize: 15, fontWeight: "800", color: "#1A1A2E", marginBottom: 4 },
-  badgeRow: { flexDirection: "row", alignItems: "center", gap: 5 },
+  childName: { fontSize: 15, fontWeight: "800", color: "#1A1A2E", marginBottom: 3 },
+  badgeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "nowrap",      // never wraps to second line
+    gap: 4,
+  },
   infoBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 3,
+    gap: 2,
     backgroundColor: "#EEF2FF",
-    borderRadius: 8,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
+    borderRadius: 6,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
   },
-  infoBadgeText: { fontSize: 10, fontWeight: "700", color: PRIMARY },
-  badgeDot: { color: "#D1D5DB", fontSize: 14 },
+  infoBadgeText: { fontSize: 9, fontWeight: "700", color: PRIMARY },
+  badgeDot: { color: "#D1D5DB", fontSize: 12 },
   notifBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 13,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     backgroundColor: "#EEF2FF",
     alignItems: "center",
     justifyContent: "center",
@@ -823,19 +883,20 @@ childName: { fontSize: 15, fontWeight: "800", color: "#1A1A2E", marginBottom: 4 
 
   // ── Grid ──
   grid: {
-    padding: 16,
-    paddingTop: 20,
+    padding: 12,
+    paddingTop: 16,
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
+    alignItems: "flex-start",  // prevents cards from stretching height
   },
   card: {
     width: "48%",
+    height: 110,               // fixed height — no stretching
     backgroundColor: "#fff",
-    paddingVertical: 22,
-    paddingHorizontal: 12,
-    borderRadius: 18,
-    marginBottom: 14,
+    paddingHorizontal: 10,
+    borderRadius: 16,
+    marginBottom: 10,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
@@ -844,25 +905,25 @@ childName: { fontSize: 15, fontWeight: "800", color: "#1A1A2E", marginBottom: 4 
     shadowColor: PRIMARY,
     shadowOpacity: 0.06,
     shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 6,
+    shadowRadius: 5,
   },
   cardIconWrap: {
-    width: 54,
-    height: 54,
-    borderRadius: 16,
+    width: 48,
+    height: 48,
+    borderRadius: 14,
     backgroundColor: "#EEF2FF",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 10,
+    marginBottom: 8,
   },
-  cardIcon: { fontSize: 26 },
+  cardIcon: { fontSize: 22 },
   cardText: { fontSize: 12, fontWeight: "700", color: "#1A1A2E", textAlign: "center" },
 
   // ── Sidebar ──
   overlay: { flex: 1, flexDirection: "row" },
   overlayBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)" },
   sidebar: {
-    width: 280,
+    width: 270,
     backgroundColor: "#fff",
     elevation: 16,
     shadowColor: "#000",
@@ -873,78 +934,110 @@ childName: { fontSize: 15, fontWeight: "800", color: "#1A1A2E", marginBottom: 4 
   sbHeader: {
     backgroundColor: PRIMARY,
     paddingTop: 48,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
+    paddingBottom: 16,
+    paddingHorizontal: 16,
+  },
+  sbLogoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  sbLogoBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    backgroundColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center",
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+  },
+  sbLogo: { width: 30, height: 30, resizeMode: "contain" },
+  sbBrandName: {
+    flex: 1,
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "800",
+    letterSpacing: 0.2,
+  },
+  sbClose: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sbDivider: {
+    height: 1,
+    backgroundColor: "rgba(255,255,255,0.18)",
+    marginVertical: 12,
+  },
+  sbChildRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
   },
   sbAvatarCircle: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     backgroundColor: "rgba(255,255,255,0.2)",
     borderWidth: 2,
     borderColor: "rgba(255,255,255,0.35)",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 10,
   },
-  sbAvatarText: { color: "#fff", fontSize: 20, fontWeight: "800" },
-  sbName: { color: "#fff", fontSize: 16, fontWeight: "800", marginBottom: 3 },
-  sbMeta: { color: "rgba(255,255,255,0.75)", fontSize: 12 },
-  sbClose: {
-    position: "absolute",
-    top: 16,
-    right: 16,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "rgba(255,255,255,0.15)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  sbSection: { paddingHorizontal: 16, paddingTop: 18, paddingBottom: 4 },
+  sbAvatarText: { color: "#fff", fontSize: 16, fontWeight: "800" },
+  sbName: { color: "#fff", fontSize: 14, fontWeight: "800" },
+  sbMeta: { color: "rgba(255,255,255,0.7)", fontSize: 11, marginTop: 1 },
+  sbSection: { paddingHorizontal: 14, paddingTop: 14, paddingBottom: 2 },
   sbSectionLabel: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "700",
     color: "#9CA3AF",
     letterSpacing: 0.8,
-    marginBottom: 8,
+    marginBottom: 6,
   },
   sbPickerBox: {
     backgroundColor: "#F5F7FA",
-    borderRadius: 10,
+    borderRadius: 9,
     borderWidth: 1,
     borderColor: "#E0E6F0",
     overflow: "hidden",
-    height: 44,
+    height: 40,
   },
-  sbPicker: { height: 56, marginTop: -6, color: PRIMARY },
+  sbPicker: { height: 52, marginTop: -6, color: PRIMARY },
   sbItem: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 11,
+    paddingVertical: 9,
     borderBottomWidth: 0.5,
     borderBottomColor: "#F0F2F8",
-    gap: 12,
+    gap: 10,
   },
   sbItemIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 9,
+    width: 30,
+    height: 30,
+    borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
   },
-  sbItemLabel: { flex: 1, fontSize: 14, color: "#1A1A2E", fontWeight: "500" },
+  sbItemLabel: { flex: 1, fontSize: 13, color: "#1A1A2E", fontWeight: "500" },
   sbLogout: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    margin: 16,
-    marginTop: 8,
-    padding: 14,
+    gap: 8,
+    margin: 14,
+    marginTop: 6,
+    padding: 12,
     backgroundColor: "#FFF5F5",
-    borderRadius: 12,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: "#FECACA",
   },
-  sbLogoutText: { fontSize: 14, fontWeight: "700", color: "#C62828" },
+  sbLogoutText: { fontSize: 13, fontWeight: "700", color: "#C62828" },
 });
