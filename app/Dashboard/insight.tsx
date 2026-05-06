@@ -12,6 +12,7 @@ import {
 import { Picker } from "@react-native-picker/picker";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
+import { useTheme } from "../ThemeContext";
 
 const BASE_URL = "https://connect.schoolaid.in";
 
@@ -22,6 +23,10 @@ export default function InsightScreen() {
   const [child, setChild] = useState<any>(null);
   const [yearId, setYearId] = useState<string | null>(null);
   const [yearLabel, setYearLabel] = useState<string | null>(null);
+const childName = child?.name ?? "Student";
+const childClass = child?.classname ?? "";
+const childSection = child?.sectionname ?? "";
+const { theme } = useTheme();
 
   // ── Active tab ──
   const [activeTab, setActiveTab] = useState<TabType>("subject");
@@ -48,6 +53,7 @@ export default function InsightScreen() {
       const yearIdStr = await AsyncStorage.getItem("selectedYearId");
       const yearLabelStr = await AsyncStorage.getItem("selectedYearLabel");
       if (childStr) setChild(JSON.parse(childStr));
+      console.log("Loaded child from storage:", childStr);
       if (yearIdStr) setYearId(yearIdStr);
       if (yearLabelStr) setYearLabel(yearLabelStr);
     };
@@ -173,33 +179,42 @@ export default function InsightScreen() {
       { cancelable: true }
     );
 
+    
+  const getInitials = (name: string) => {
+    const parts = name.trim().split(' ');
+    if (parts.length >= 2) {
+      return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
+  };
+
   return (
     <SafeAreaView style={styles.safe}>
 
       {/* ══ HEADER ══ */}
-      <View style={styles.header}>
+ <View style={[styles.headerTop, { backgroundColor: theme.primary }]}>
         <View style={styles.headerTopRow}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <Text style={styles.backArrow}>↩</Text>
+            <Text style={styles.backArrow}>←</Text>
           </TouchableOpacity>
-          <Text style={styles.headerTitle} numberOfLines={1}>
-            Welcome, {child?.name ?? "Child"}
-          </Text>
-          <View style={styles.backBtn} />
-        </View>
-        <Text style={styles.headerSubtitle}>
-          Class: {child?.classname ?? "—"} · Section {child?.sectionname ?? "—"}
-        </Text>
-        <Text style={styles.headerSubtitle}>Academic Year: {yearLabel ?? "—"}</Text>
-        <View style={styles.actions}>
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => router.push("/addchild")}
-          >
-            <Text style={styles.actionText}>Switch Child</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton} onPress={handleLogout}>
-            <Text style={styles.actionText}>Logout</Text>
+          
+          {/* Avatar Circle with Initials */}
+          <View style={styles.avatarContainer}>
+            <View style={[styles.avatarCircle, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+              <Text style={styles.avatarInitials}>{getInitials(childName)}</Text>
+            </View>
+            <View style={styles.headerTextContainer}>
+              <Text style={styles.headerTitle}>{childName}</Text>
+              <View style={styles.classBadge}>
+                <Text style={styles.classBadgeText}>
+                  {childClass} {childSection && `· ${childSection}`}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn}>
+            <Text style={styles.logoutIcon}>↪</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -333,43 +348,93 @@ export default function InsightScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#F5F7FA" },
 
-  header: {
-    backgroundColor: "#0047AB",
-    paddingTop: 50,
-    paddingBottom: 20,
+  headerTop: { 
+    paddingTop: 50, 
+    paddingBottom: 20, 
     paddingHorizontal: 16,
-    alignItems: "center",
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
   },
-  headerTopRow: {
+  headerTopRow: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    justifyContent: "space-between", 
+    width: "100%" 
+  },
+  backBtn: { 
+    width: 40, 
+    height: 40, 
+    alignItems: "center", 
+    justifyContent: "center",
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+  },
+  backArrow: { 
+    color: "#fff", 
+    fontSize: 22, 
+    fontWeight: "600" 
+  },
+  
+  // New avatar styles
+  avatarContainer: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    width: "100%",
-    marginBottom: 6,
-  },
-  backBtn: { width: 36, padding: 4 },
-  backArrow: { color: "#fff", fontSize: 24, fontWeight: "bold" },
-  headerTitle: {
-    color: "#fff",
-    fontSize: 22,
-    fontWeight: "800",
-    textAlign: "center",
+    gap: 12,
     flex: 1,
+    justifyContent: "center",
   },
-  headerSubtitle: {
-    color: "rgba(255,255,255,0.85)",
-    fontSize: 13,
-    textAlign: "center",
+  avatarCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.3)",
+  },
+  avatarInitials: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  headerTextContainer: {
+    alignItems: "flex-start",
+  },
+  headerTitle: { 
+    color: "#fff", 
+    fontSize: 18, 
+    fontWeight: "800",
     marginBottom: 4,
   },
-  actions: { flexDirection: "row", gap: 12, marginTop: 12 },
-  actionButton: {
-    backgroundColor: "#fff",
-    paddingVertical: 10,
-    paddingHorizontal: 24,
-    borderRadius: 10,
+  classBadge: {
+    backgroundColor: "rgba(255,255,255,0.2)",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
   },
-  actionText: { fontWeight: "700", fontSize: 14, color: "#0047AB" },
+  classBadgeText: {
+    color: "rgba(255,255,255,0.95)",
+    fontSize: 11,
+    fontWeight: "600",
+  },
+    logoutBtn: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+  },
+  logoutIcon: {
+    color: "#fff",
+    fontSize: 20,
+    fontWeight: "600",
+  },
 
   // ── TAB BAR ──
   tabBar: {

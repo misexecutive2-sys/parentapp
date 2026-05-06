@@ -534,6 +534,14 @@ export default function StudentNoticeBoard() {
       Alert.alert("Error", "Could not open attachment")
     );
   };
+    const getInitials = (name: string) => {
+    const parts = name.trim().split(' ');
+    if (parts.length >= 2) {
+      return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
+  };
+
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -543,18 +551,50 @@ export default function StudentNoticeBoard() {
       year: "numeric",
     });
   };
+    const handleLogout = () =>
+    Alert.alert("Logout", "Do you really want to logout?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Yes",
+        style: "destructive",
+        onPress: async () => {
+          await AsyncStorage.removeItem("token");
+          await AsyncStorage.removeItem("selectedChild");
+          await AsyncStorage.removeItem("selectedYearId");
+          await AsyncStorage.removeItem("selectedYearLabel");
+          router.replace("/login");
+        },
+      },
+    ], { cancelable: true });
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: theme.background }]}>
       {/* Header */}
-      <View style={[styles.headerTop, { backgroundColor: theme.primary }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Text style={styles.backArrow}>↩</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Welcome, {childName}</Text>
-        <Text style={styles.childSubtitle}>
-          Class : {childClass} · Section : {childSection}
-        </Text>
+ <View style={[styles.headerTop, { backgroundColor: theme.primary }]}>
+        <View style={styles.headerTopRow}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <Text style={styles.backArrow}>←</Text>
+          </TouchableOpacity>
+          
+          {/* Avatar Circle with Initials */}
+          <View style={styles.avatarContainer}>
+            <View style={[styles.avatarCircle, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+              <Text style={styles.avatarInitials}>{getInitials(childName)}</Text>
+            </View>
+            <View style={styles.headerTextContainer}>
+              <Text style={styles.headerTitle}>{childName}</Text>
+              <View style={styles.classBadge}>
+                <Text style={styles.classBadgeText}>
+                  {childClass} {childSection && `· ${childSection}`}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn}>
+            <Text style={styles.logoutIcon}>↪</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Body */}
@@ -646,11 +686,93 @@ export default function StudentNoticeBoard() {
 const styles = StyleSheet.create({
   safe:           { flex: 1 },
   centered:       { alignItems: "center", justifyContent: "center", padding: 40 },
-  headerTop:      { paddingTop: 50, paddingBottom: 20, alignItems: "center", paddingHorizontal: 16 },
-  backBtn:        { position: "absolute", left: 16, top: 50, padding: 4 },
-  backArrow:      { color: "#fff", fontSize: 24, fontWeight: "bold" },
-  headerTitle:    { color: "#fff", fontSize: 22, fontWeight: "800" },
-  childSubtitle:  { color: "rgba(255,255,255,0.85)", fontSize: 14, marginTop: 4 },
+  headerTop: { 
+    paddingTop: 50, 
+    paddingBottom: 20, 
+    paddingHorizontal: 16,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+  },
+  headerTopRow: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    justifyContent: "space-between", 
+    width: "100%" 
+  },
+  backBtn: { 
+    width: 40, 
+    height: 40, 
+    alignItems: "center", 
+    justifyContent: "center",
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+  },
+  backArrow: { 
+    color: "#fff", 
+    fontSize: 22, 
+    fontWeight: "600" 
+  },
+  
+  // New avatar styles
+  avatarContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+    justifyContent: "center",
+  },
+  avatarCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.3)",
+  },
+  avatarInitials: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  headerTextContainer: {
+    alignItems: "flex-start",
+  },
+  headerTitle: { 
+    color: "#fff", 
+    fontSize: 18, 
+    fontWeight: "800",
+    marginBottom: 4,
+  },
+  classBadge: {
+    backgroundColor: "rgba(255,255,255,0.2)",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+  },
+  classBadgeText: {
+    color: "rgba(255,255,255,0.95)",
+    fontSize: 11,
+    fontWeight: "600",
+  },
+    logoutBtn: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+  },
+  logoutIcon: {
+    color: "#fff",
+    fontSize: 20,
+    fontWeight: "600",
+  },
   pageTitle:      { fontSize: 20, fontWeight: "800", margin: 16 },
   noticeCard: {
     backgroundColor: "#fff",
@@ -675,7 +797,7 @@ const styles = StyleSheet.create({
   attachmentText: { fontSize: 13, fontWeight: "600" },
   metaRow:        { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 10 },
   dateText:       { fontSize: 12, color: "#aaa" },
-  classBadge:     { fontSize: 11, color: "#888", backgroundColor: "#F0F4FF", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  // classBadge:     { fontSize: 11, color: "#888", backgroundColor: "#F0F4FF", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   emptyCard: {
     backgroundColor: "#fff",
     marginHorizontal: 16,

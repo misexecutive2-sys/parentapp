@@ -562,6 +562,15 @@ export default function MessageScreen() {
       },
     ]);
 
+      const getInitials = (name: string) => {
+    const parts = name.trim().split(' ');
+    if (parts.length >= 2) {
+      return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
+  };
+
+
     const handleDelete = useCallback(async () => {
   const msg = contextMsgRef.current;
   if (!msg) return;
@@ -712,24 +721,33 @@ export default function MessageScreen() {
     <SafeAreaView style={msgStyles.safe}>
 
       {/* ── Header ── */}
-      <View style={[msgStyles.headerTop, { backgroundColor: theme.primary }]}>
+       <View style={[msgStyles.headerTop, { backgroundColor: theme.primary }]}>
         <View style={msgStyles.headerTopRow}>
           <TouchableOpacity onPress={() => router.back()} style={msgStyles.backBtn}>
-            <Text style={msgStyles.backArrow}>↩</Text>
+            <Text style={msgStyles.backArrow}>←</Text>
           </TouchableOpacity>
-          <Text style={msgStyles.headerTitle} numberOfLines={1}>Welcome, {childName}</Text>
-          <View style={msgStyles.backBtn} />
-        </View>
-        <Text style={msgStyles.headerSubtitle}>Class: {classname} · Section {sectionname}</Text>
-        <View style={msgStyles.actions}>
-          <TouchableOpacity style={msgStyles.actionButton} onPress={() => router.push("/addchild")}>
-            <Text style={msgStyles.actionText}>Switch Child</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={msgStyles.actionButton} onPress={handleLogout}>
-            <Text style={msgStyles.actionText}>Logout</Text>
+          
+          {/* Avatar Circle with Initials */}
+          <View style={msgStyles.avatarContainer}>
+            <View style={[msgStyles.avatarCircle, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+              <Text style={msgStyles.avatarInitials}>{getInitials(childName)}</Text>
+            </View>
+            <View style={msgStyles.headerTextContainer}>
+              <Text style={msgStyles.headerTitle}>{childName}</Text>
+              <View style={msgStyles.classBadge}>
+                <Text style={msgStyles.classBadgeText}>
+                  {classname} {sectionname && `· ${sectionname}`}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          <TouchableOpacity onPress={handleLogout} style={msgStyles.logoutBtn}>
+            <Text style={msgStyles.logoutIcon}>↪</Text>
           </TouchableOpacity>
         </View>
       </View>
+
 
       {/* ── Pinned Banner ── */}
       {/* FIX 3: Pinned chips are now clickable and scroll to that message */}
@@ -1011,15 +1029,94 @@ export default function MessageScreen() {
 
 const msgStyles = StyleSheet.create({
   safe:                  { flex: 1, backgroundColor: "#F5F7FA" },
-  headerTop:             { paddingTop: 50, paddingBottom: 28, paddingHorizontal: 16, alignItems: "center" },
-  headerTopRow:          { flexDirection: "row", alignItems: "center", justifyContent: "space-between", width: "100%", marginBottom: 6 },
-  backBtn:               { width: 36, padding: 4 },
-  backArrow:             { color: "#fff", fontSize: 24, fontWeight: "bold" },
-  headerTitle:           { color: "#fff", fontSize: 22, fontWeight: "800", textAlign: "center", flex: 1 },
-  headerSubtitle:        { color: "rgba(255,255,255,0.8)", fontSize: 13, marginBottom: 12 },
-  actions:               { flexDirection: "row", gap: 12 },
-  actionButton:          { backgroundColor: "#fff", paddingVertical: 10, paddingHorizontal: 28, borderRadius: 10 },
-  actionText:            { fontWeight: "700", fontSize: 14 },
+   headerTop: { 
+    paddingTop: 50, 
+    paddingBottom: 20, 
+    paddingHorizontal: 16,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+  },
+  headerTopRow: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    justifyContent: "space-between", 
+    width: "100%" 
+  },
+  backBtn: { 
+    width: 40, 
+    height: 40, 
+    alignItems: "center", 
+    justifyContent: "center",
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+  },
+  backArrow: { 
+    color: "#fff", 
+    fontSize: 22, 
+    fontWeight: "600" 
+  },
+  
+  // New avatar styles
+  avatarContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+    justifyContent: "center",
+  },
+  avatarCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.3)",
+  },
+  avatarInitials: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  headerTextContainer: {
+    alignItems: "flex-start",
+  },
+  headerTitle: { 
+    color: "#fff", 
+    fontSize: 18, 
+    fontWeight: "800",
+    marginBottom: 4,
+  },
+  classBadge: {
+    backgroundColor: "rgba(255,255,255,0.2)",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+  },
+  classBadgeText: {
+    color: "rgba(255,255,255,0.95)",
+    fontSize: 11,
+    fontWeight: "600",
+  },
+    logoutBtn: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+  },
+  logoutIcon: {
+    color: "#fff",
+    fontSize: 20,
+    fontWeight: "600",
+  },
+
   loadingWrapper:        { flex: 1, alignItems: "center", justifyContent: "center", gap: 10 },
   loadingText:           { fontSize: 13, color: "#6B7280", fontWeight: "600" },
   list:                  { padding: 16, paddingBottom: 8 },

@@ -188,21 +188,53 @@ const handlePreview = async () => {
   };
 
   // ✅ Save child to AsyncStorage then navigate
-  const handleSelectChild = async (item: any) => {
-    await AsyncStorage.setItem(
-      "selectedChild",
-      JSON.stringify({
-        id: item.id,
-        name: item.student_firstname,
-        classname: item.class_name,
-        sectionname: item.section_name,
-      })
-    );
-    router.replace({
-      pathname: "/Dashboard",
-      params: { childId: item.id, childName: item.student_firstname , classname: item.class_name, sectionname: item.section_name},
+const handleSelectChild = async (item: any) => {
+  const token = await AsyncStorage.getItem("token");
+  const yearId = await AsyncStorage.getItem("selectedYearId");
+
+  let classId = null;
+  let sectionId = null;
+
+  try {
+    const res = await fetch(`${API_URL}/api/app/student-exams`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        "x-academic-year": yearId ?? "16",
+      },
+      body: JSON.stringify({ student_id: item.id }),
     });
-  };
+    const data = await res.json();
+    classId = data.class_id ?? null;
+    sectionId = data.section_id ?? null;
+    console.log("Got class_id:", classId, "section_id:", sectionId);
+  } catch (e) {
+    console.warn("Could not fetch class/section IDs:", e);
+  }
+
+  await AsyncStorage.setItem(
+    "selectedChild",
+    JSON.stringify({
+      id: item.id,
+      name: item.student_firstname,
+      classname: item.class_name,
+      sectionname: item.section_name,
+      class_id: classId,
+      section_id: sectionId,
+    })
+  );
+
+  router.replace({
+    pathname: "/Dashboard",
+    params: {
+      childId: item.id,
+      childName: item.student_firstname,
+      classname: item.class_name,
+      sectionname: item.section_name,
+    },
+  });
+};
 
   return (
     <SafeAreaView style={styles.safe}>

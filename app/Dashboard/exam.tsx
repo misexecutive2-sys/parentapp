@@ -1193,6 +1193,14 @@ export default function ExamResultsScreen() {
       { cancelable: true }
     );
 
+      const getInitials = (name: string) => {
+    const parts = name.trim().split(' ');
+    if (parts.length >= 2) {
+      return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
+  };
+
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: theme.background }]}>
 
@@ -1200,28 +1208,30 @@ export default function ExamResultsScreen() {
       <View style={[styles.headerTop, { backgroundColor: theme.primary }]}>
         <View style={styles.headerTopRow}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <Text style={styles.backArrow}>↩</Text>
+            <Text style={styles.backArrow}>←</Text>
           </TouchableOpacity>
-          <Text style={styles.headerTitle} numberOfLines={1}>
-            Welcome, {childName}
-          </Text>
-          <View style={styles.backBtn} />
-        </View>
-        <Text style={styles.headerSubtitle}>
-          Class: {className} · Section {sectionName}
-        </Text>
-        <View style={styles.actions}>
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => router.push("/addchild")}
-          >
-            <Text style={styles.actionText}>Switch Child</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton} onPress={handleLogout}>
-            <Text style={styles.actionText}>Logout</Text>
+          
+          {/* Avatar Circle with Initials */}
+          <View style={styles.avatarContainer}>
+            <View style={[styles.avatarCircle, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+              <Text style={styles.avatarInitials}>{getInitials(childName)}</Text>
+            </View>
+            <View style={styles.headerTextContainer}>
+              <Text style={styles.headerTitle}>{childName}</Text>
+              <View style={styles.classBadge}>
+                <Text style={styles.classBadgeText}>
+                  {className} {sectionName && `· ${sectionName}`}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn}>
+            <Text style={styles.logoutIcon}>↪</Text>
           </TouchableOpacity>
         </View>
       </View>
+
 
       {loading ? (
         <View style={styles.centered}>
@@ -1332,42 +1342,94 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
   centered: { flex: 1, alignItems: "center", justifyContent: "center" },
 
-  // Header
-  headerTop: {
-    paddingTop: 50,
-    paddingBottom: 28,
+ headerTop: { 
+    paddingTop: 50, 
+    paddingBottom: 20, 
     paddingHorizontal: 16,
-    alignItems: "center",
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
   },
-  headerSubtitle: {
-    color: "rgba(255,255,255,0.8)",
-    fontSize: 13,
-    marginBottom: 12,
+  headerTopRow: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    justifyContent: "space-between", 
+    width: "100%" 
   },
-  headerTopRow: {
+  backBtn: { 
+    width: 40, 
+    height: 40, 
+    alignItems: "center", 
+    justifyContent: "center",
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+  },
+  backArrow: { 
+    color: "#fff", 
+    fontSize: 22, 
+    fontWeight: "600" 
+  },
+  
+  // New avatar styles
+  avatarContainer: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    width: "100%",
-    marginBottom: 6,
-  },
-  backBtn: { width: 36, padding: 4 },
-  backArrow: { color: "#fff", fontSize: 24, fontWeight: "bold" },
-  headerTitle: {
-    color: "#fff",
-    fontSize: 22,
-    fontWeight: "800",
-    textAlign: "center",
+    gap: 12,
     flex: 1,
+    justifyContent: "center",
   },
-  actions: { flexDirection: "row", gap: 12 },
-  actionButton: {
-    backgroundColor: "#fff",
-    paddingVertical: 10,
-    paddingHorizontal: 28,
-    borderRadius: 10,
+  avatarCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.3)",
   },
-  actionText: { fontWeight: "700", fontSize: 14 },
+  avatarInitials: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  headerTextContainer: {
+    alignItems: "flex-start",
+  },
+  headerTitle: { 
+    color: "#fff", 
+    fontSize: 18, 
+    fontWeight: "800",
+    marginBottom: 4,
+  },
+  classBadge: {
+    backgroundColor: "rgba(255,255,255,0.2)",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+  },
+  classBadgeText: {
+    color: "rgba(255,255,255,0.95)",
+    fontSize: 11,
+    fontWeight: "600",
+  },
+    logoutBtn: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+  },
+  logoutIcon: {
+    color: "#fff",
+    fontSize: 20,
+    fontWeight: "600",
+  },
+
 
   // Filters
   filters: { margin: 16 },
