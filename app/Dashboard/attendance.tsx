@@ -728,7 +728,7 @@ export default function AttendanceScreen() {
       <View style={[styles.headerTop, { backgroundColor: theme.primary }]}>
         <View style={styles.headerTopRow}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <Text style={styles.backArrow}>←</Text>
+            <Text style={styles.backArrow}>⬅</Text>
           </TouchableOpacity>
           <View style={styles.avatarContainer}>
             <View style={[styles.avatarCircle, { backgroundColor: "rgba(255,255,255,0.2)" }]}>

@@ -494,7 +494,7 @@ export default function StudyMaterialScreen() {
       <View style={[styles.headerTop, { backgroundColor: theme.primary }]}>
         <View style={styles.headerTopRow}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <Text style={styles.backArrow}>↩</Text>
+            <Text style={styles.backArrow}>⬅</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle} numberOfLines={1}>Welcome, {childName}</Text>
           <View style={styles.backBtn} />

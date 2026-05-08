@@ -195,7 +195,7 @@ const { theme } = useTheme();
  <View style={[styles.headerTop, { backgroundColor: theme.primary }]}>
         <View style={styles.headerTopRow}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <Text style={styles.backArrow}>←</Text>
+            <Text style={styles.backArrow}>⬅</Text>
           </TouchableOpacity>
           
           {/* Avatar Circle with Initials */}

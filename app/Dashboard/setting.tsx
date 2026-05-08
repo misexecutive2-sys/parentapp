@@ -20,6 +20,9 @@ export default function SettingsScreen() {
   const router = useRouter();
   const { theme } = useTheme();
   // const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+    const [childName, setChildName] = useState("Student");
+      const [childClass, setChildClass] = useState("—");
+      const [childSection, setChildSection] = useState("—");
 
   const handleLogout = () =>
     Alert.alert("Logout", "Do you really want to logout?", [
@@ -57,19 +60,43 @@ These Terms and Conditions will be applicable to YOU when YOU either procure the
     );
   };
 
+    const getInitials = (name: string) => {
+    const parts = name.trim().split(' ');
+    if (parts.length >= 2) {
+      return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
+  };
+
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: theme.background }]}>
 
       {/* ══ HEADER ══ */}
-      <View style={[styles.headerTop, { backgroundColor: theme.primary }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Text style={styles.backArrow}>↩</Text>
-        </TouchableOpacity>
-        <View style={styles.logoWrapper}>
-          <Image source={require("../../assets/logo.png")} style={styles.logo} />
+ <View style={[styles.headerTop, { backgroundColor: theme.primary }]}>
+        <View style={styles.headerTopRow}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <Text style={styles.backArrow}>⬅</Text>
+          </TouchableOpacity>
+          
+          {/* Avatar Circle with Initials */}
+          <View style={styles.avatarContainer}>
+            <View style={[styles.avatarCircle, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+              <Text style={styles.avatarInitials}>{getInitials(childName)}</Text>
+            </View>
+            <View style={styles.headerTextContainer}>
+              <Text style={styles.headerTitle}>{childName}</Text>
+              <View style={styles.classBadge}>
+                <Text style={styles.classBadgeText}>
+                  {childClass} {childSection && `· ${childSection}`}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn}>
+            <Text style={styles.logoutIcon}>↪</Text>
+          </TouchableOpacity>
         </View>
-        <Text style={styles.headerTitle}>Settings</Text>
-        <Text style={styles.headerSubtitle}>Manage your preferences</Text>
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
@@ -164,18 +191,95 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
 
   // Header
-  headerTop: {
-    paddingTop: 50,
-    paddingBottom: 28,
+  headerTop: { 
+    paddingTop: 50, 
+    paddingBottom: 20, 
     paddingHorizontal: 16,
-    alignItems: "center",
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
   },
-  backBtn: { position: "absolute", top: 52, left: 16, zIndex: 10, padding: 4 },
-  backArrow: { color: "#fff", fontSize: 26, fontWeight: "bold" },
-  logoWrapper: { marginBottom: 14 },
-  logo: { width: 84, height: 84, resizeMode: "contain", borderRadius: 18, backgroundColor: "#fff" },
-  headerTitle: { color: "#fff", fontSize: 26, fontWeight: "800", textAlign: "center", marginBottom: 6 },
-  headerSubtitle: { color: "rgba(255,255,255,0.85)", fontSize: 14, textAlign: "center" },
+  headerTopRow: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    justifyContent: "space-between", 
+    width: "100%" 
+  },
+  backBtn: { 
+    width: 40, 
+    height: 40, 
+    alignItems: "center", 
+    justifyContent: "center",
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+  },
+  backArrow: { 
+    color: "#fff", 
+    fontSize: 22, 
+    fontWeight: "600" 
+  },
+  
+  // New avatar styles
+  avatarContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+    justifyContent: "center",
+  },
+  avatarCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.3)",
+  },
+  avatarInitials: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  headerTextContainer: {
+    alignItems: "flex-start",
+  },
+  headerTitle: { 
+    color: "#fff", 
+    fontSize: 18, 
+    fontWeight: "800",
+    marginBottom: 4,
+  },
+  classBadge: {
+    backgroundColor: "rgba(255,255,255,0.2)",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+  },
+  classBadgeText: {
+    color: "rgba(255,255,255,0.95)",
+    fontSize: 11,
+    fontWeight: "600",
+  },
+    logoutBtn: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+  },
+  logoutIcon: {
+    color: "#fff",
+    fontSize: 20,
+    fontWeight: "600",
+  },
+
+
 
   // Sections
   sectionLabel: {
