@@ -1,10 +1,3 @@
-// dashboard.tsx — replace your existing file with this
-// KEY CHANGES:
-//  1. Imports aggregateAndStoreNotifications from notificationHelper
-//  2. fetchNotifications() called on every dashboard load
-//  3. unreadCount populated from real data
-//  4. Bell icon navigates to /Dashboard/notifications
-
 import React, { useState, useEffect } from "react";
 import {
   View,
@@ -14,7 +7,6 @@ import {
   ScrollView,
   Image,
   Alert,
-  SafeAreaView,
   Modal,
   StatusBar,
 } from "react-native";
@@ -22,15 +14,26 @@ import { Picker } from "@react-native-picker/picker";
 import { router, useLocalSearchParams, useFocusEffect } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-// ── Import the helper ──────────────────────────────────────
 import {
   aggregateAndStoreNotifications,
   loadStoredNotifications,
+  clearNotificationData,
   AppNotification,
 } from "../utils/notificationHelper";
 
 const PRIMARY = "#0047AB";
+
+const modules = [
+  { title: "Attendance",      icon: "checkmark-circle-outline",     color: "#0047AB", bg: "#EEF3FF", route: "/Dashboard/attendance"  },
+  { title: "Notice Board",    icon: "megaphone-outline",            color: "#7C3AED", bg: "#F5F3FF", route: "/Dashboard/noticeboard" },
+  { title: "Exam",            icon: "document-text-outline",        color: "#059669", bg: "#ECFDF5", route: "/Dashboard/exam"        },
+  { title: "School Diary",    icon: "book-outline",                 color: "#D97706", bg: "#FFFBEB", route: "/Dashboard/schooldiary" },
+  { title: "Insights",        icon: "bar-chart-outline",            color: "#0891B2", bg: "#ECFEFF", route: "/Dashboard/insight"     },
+  { title: "Fees",            icon: "wallet-outline",               color: "#DC2626", bg: "#FEF2F2", route: "/Dashboard/fees"        },
+  { title: "Message Teacher", icon: "chatbubble-ellipses-outline",  color: "#059669", bg: "#ECFDF5", route: "/Dashboard/message"     },
+];
 
 export default function DashboardScreen() {
   const { childId, childName, classname, sectionname } = useLocalSearchParams<{
@@ -40,29 +43,18 @@ export default function DashboardScreen() {
     sectionname: string;
   }>();
 
-  const [years, setYears] = useState<any[]>([]);
+  const [years,          setYears]          = useState<any[]>([]);
   const [selectedYearId, setSelectedYearId] = useState<number | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [sidebarOpen,    setSidebarOpen]    = useState(false);
+  const [unreadCount,    setUnreadCount]    = useState(0);
 
-  const modules = [
-    { title: "Attendance",      icon: "📋", route: "/Dashboard/attendance" },
-    { title: "Notice Board",    icon: "📢", route: "/Dashboard/noticeboard" },
-    { title: "Exam",            icon: "📝", route: "/Dashboard/exam" },
-    { title: "School Diary",    icon: "📓", route: "/Dashboard/schooldiary" },
-    { title: "Insights",        icon: "📊", route: "/Dashboard/insight" },
-    { title: "Fees",            icon: "💰", route: "/Dashboard/fees" },
-    { title: "Message Teacher", icon: "💬", route: "/Dashboard/message" },
-  ];
-
-  // ── On mount: save child, fetch years, fetch notifications ──
+  // ── On mount ─────────────────────────────────────────────
   useEffect(() => {
     fetchYears();
     fetchAndCountNotifications();
   }, []);
 
-  // ── Re-sync bell count every time dashboard comes into focus ──
-  // Fires when user navigates back from notifications screen
+  // ── Re-sync bell when screen comes into focus ─────────────
   useFocusEffect(
     React.useCallback(() => {
       loadStoredNotifications().then((stored) => {
@@ -71,6 +63,7 @@ export default function DashboardScreen() {
     }, [])
   );
 
+  // ── Persist child params ──────────────────────────────────
   useEffect(() => {
     if (childId && childName && classname && sectionname) {
       AsyncStorage.setItem(
@@ -80,12 +73,10 @@ export default function DashboardScreen() {
     }
   }, [childId, childName, classname, sectionname]);
 
-  // ── Aggregate notices + diary and compute unread count ────
   const fetchAndCountNotifications = async () => {
     try {
       const notifications: AppNotification[] = await aggregateAndStoreNotifications();
-      const count = notifications.filter((n) => !n.read).length;
-      setUnreadCount(count);
+      setUnreadCount(notifications.filter((n) => !n.read).length);
     } catch (err) {
       console.error("Dashboard notification fetch error:", err);
     }
@@ -103,7 +94,7 @@ export default function DashboardScreen() {
       setYears(arr);
       if (arr.length > 0) {
         setSelectedYearId(arr[0].id);
-        await AsyncStorage.setItem("selectedYearId", String(arr[0].id));
+        await AsyncStorage.setItem("selectedYearId",    String(arr[0].id));
         await AsyncStorage.setItem("selectedYearLabel", arr[0].year ?? String(arr[0].id));
       }
     } catch (err) {
@@ -114,28 +105,32 @@ export default function DashboardScreen() {
   const handleYearChange = async (yearId: number) => {
     setSelectedYearId(yearId);
     const y = years.find((yr) => yr.id === yearId);
-    await AsyncStorage.setItem("selectedYearId", String(yearId));
+    await AsyncStorage.setItem("selectedYearId",    String(yearId));
     await AsyncStorage.setItem("selectedYearLabel", y?.year ?? String(yearId));
   };
 
-  const handleLogout = () => {
-    setSidebarOpen(false);
-    Alert.alert("Logout", "Are you sure you want to log out?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Yes", style: "destructive",
-        onPress: async () => {
-          await AsyncStorage.multiRemove([
-            "token", "user", "selectedChild", "selectedYearId",
-            "selectedYearLabel", "aggregatedNotifications",
-          ]);
-          router.replace("/login");
-        },
+const handleLogout = () => {
+  setSidebarOpen(false);
+  Alert.alert("Logout", "Are you sure you want to log out?", [
+    { text: "Cancel", style: "cancel" },
+    {
+      text: "Yes", style: "destructive",
+      onPress: async () => {
+        await clearNotificationData(); // ✅ clears both keys
+        await AsyncStorage.multiRemove([
+          "token", "user", "selectedChild",
+          "selectedYearId", "selectedYearLabel",
+        ]);
+        router.replace("/login");
       },
-    ]);
-  };
+    },
+  ]);
+};
 
-  const handleSwitchChild = () => { setSidebarOpen(false); router.replace("/addchild"); };
+  const handleSwitchChild = () => {
+    setSidebarOpen(false);
+    router.replace("/addchild");
+  };
 
   const getInitials = (name: string) => {
     const parts = (name ?? "").trim().split(" ");
@@ -150,15 +145,12 @@ export default function DashboardScreen() {
     });
   };
 
-  // ── Bell tap → notifications screen ───────────────────────
   const handleBellPress = () => {
     router.push({
       pathname: "/Dashboard/notifications",
       params: { childId, childName, classname, sectionname },
     });
   };
-
-  const selectedYearLabel = years.find((y) => y.id === selectedYearId)?.year ?? "";
 
   const getGreeting = () => {
     const h = new Date().getHours();
@@ -167,11 +159,13 @@ export default function DashboardScreen() {
     return "Good Evening";
   };
 
+  const selectedYearLabel = years.find((y) => y.id === selectedYearId)?.year ?? "";
+
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaProvider style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={PRIMARY} />
 
-      {/* ── HEADER ── */}
+      {/* ── HEADER ─────────────────────────────────────────── */}
       <View style={styles.header}>
 
         {/* Top bar */}
@@ -183,12 +177,12 @@ export default function DashboardScreen() {
 
           <View style={{ flex: 1 }} />
 
-          {selectedYearLabel ? (
+          {selectedYearLabel && (
             <View style={styles.yearPill}>
               <Ionicons name="calendar-outline" size={10} color="rgba(255,255,255,0.9)" />
               <Text style={styles.yearPillText}>{selectedYearLabel}</Text>
             </View>
-          ) : null}
+          )}
 
           <TouchableOpacity
             style={styles.menuBtn}
@@ -226,7 +220,7 @@ export default function DashboardScreen() {
             </View>
           </View>
 
-          {/* ── Bell with real unread count ── */}
+          {/* Bell */}
           <TouchableOpacity
             style={styles.notifBtn}
             onPress={handleBellPress}
@@ -244,27 +238,34 @@ export default function DashboardScreen() {
         </View>
       </View>
 
-      {/* ── MODULE GRID ── */}
+      {/* ── MODULE LIST ────────────────────────────────────── */}
       <ScrollView
         contentContainerStyle={styles.grid}
         showsVerticalScrollIndicator={false}
       >
-        {modules.map((mod, idx) => (
-          <TouchableOpacity
-            key={idx}
-            style={styles.card}
-            onPress={() => navigateTo(mod.route)}
-            activeOpacity={0.85}
-          >
-            <View style={styles.cardIconWrap}>
-              <Text style={styles.cardIcon}>{mod.icon}</Text>
-            </View>
-            <Text style={styles.cardText}>{mod.title}</Text>
-          </TouchableOpacity>
-        ))}
+        <Text style={styles.gridLabel}>Quick Access</Text>
+        <View style={styles.gridWrap}>
+          {modules.map((mod, idx) => (
+            <TouchableOpacity
+              key={idx}
+              style={styles.card}
+              onPress={() => navigateTo(mod.route)}
+              activeOpacity={0.82}
+            >
+              <View style={[styles.cardAccent, { backgroundColor: mod.color }]} />
+              <View style={[styles.cardIconWrap, { backgroundColor: mod.bg }]}>
+                <Ionicons name={mod.icon as any} size={26} color={mod.color} />
+              </View>
+              <Text style={styles.cardText}>{mod.title}</Text>
+              <View style={[styles.cardArrow, { backgroundColor: mod.bg }]}>
+                <Ionicons name="chevron-forward-outline" size={13} color={mod.color} />
+              </View>
+            </TouchableOpacity>
+          ))}
+        </View>
       </ScrollView>
 
-      {/* ── SIDEBAR DRAWER ── */}
+      {/* ── SIDEBAR ────────────────────────────────────────── */}
       <Modal
         visible={sidebarOpen}
         transparent
@@ -278,13 +279,12 @@ export default function DashboardScreen() {
             activeOpacity={1}
           />
           <View style={styles.sidebar}>
+
+            {/* Sidebar header */}
             <View style={styles.sbHeader}>
               <View style={styles.sbLogoRow}>
                 <View style={styles.sbLogoBox}>
-                  <Image
-                    source={require("../../assets/logo.png")}
-                    style={styles.sbLogo}
-                  />
+                  <Image source={require("../../assets/logo.png")} style={styles.sbLogo} />
                 </View>
                 <Text style={styles.sbBrandName}>School Aid</Text>
                 <TouchableOpacity
@@ -309,6 +309,8 @@ export default function DashboardScreen() {
             </View>
 
             <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+
+              {/* Year picker */}
               <View style={styles.sbSection}>
                 <Text style={styles.sbSectionLabel}>ACADEMIC YEAR</Text>
                 {years.length > 0 && (
@@ -333,6 +335,7 @@ export default function DashboardScreen() {
                 )}
               </View>
 
+              {/* Quick links */}
               <View style={styles.sbSection}>
                 <Text style={styles.sbSectionLabel}>QUICK LINKS</Text>
 
@@ -367,22 +370,25 @@ export default function DashboardScreen() {
                 </TouchableOpacity>
               </View>
 
+              {/* Logout */}
               <TouchableOpacity style={styles.sbLogout} onPress={handleLogout}>
                 <Ionicons name="log-out-outline" size={18} color="#C62828" />
                 <Text style={styles.sbLogoutText}>Logout</Text>
               </TouchableOpacity>
+
             </ScrollView>
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </SafeAreaProvider>
   );
 }
 
-// ── Keep your existing styles unchanged below ──────────────
 const styles = StyleSheet.create({
   safe:            { flex: 1, backgroundColor: "#F4F6FB" },
-  header:          { backgroundColor: PRIMARY, paddingBottom: 16, borderBottomLeftRadius: 28, borderBottomRightRadius: 28, elevation: 8, shadowColor: PRIMARY, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 12 },
+
+  // Header
+  header:          { backgroundColor: PRIMARY, paddingBottom: 16, borderBottomLeftRadius: 28, borderBottomRightRadius: 28, elevation: 8, shadowColor: PRIMARY, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 12 },
   topBar:          { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8 },
   topBarLeft:      { gap: 1 },
   schoolLabel:     { fontSize: 16, fontWeight: "800", color: "#fff", letterSpacing: 0.3 },
@@ -390,6 +396,8 @@ const styles = StyleSheet.create({
   yearPill:        { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "rgba(255,255,255,0.15)", borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4, marginRight: 8 },
   yearPillText:    { fontSize: 11, color: "#fff", fontWeight: "700" },
   menuBtn:         { width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.15)", alignItems: "center", justifyContent: "center" },
+
+  // Child card
   childCard:       { flexDirection: "row", alignItems: "center", marginHorizontal: 16, backgroundColor: "#fff", borderRadius: 20, paddingHorizontal: 14, paddingVertical: 12, gap: 12, elevation: 4, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8 },
   childAvatarWrap: { position: "relative" },
   childAvatar:     { width: 48, height: 48, borderRadius: 24, backgroundColor: `${PRIMARY}18`, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: `${PRIMARY}30` },
@@ -405,11 +413,18 @@ const styles = StyleSheet.create({
   notifBtn:        { width: 40, height: 40, borderRadius: 20, backgroundColor: `${PRIMARY}10`, alignItems: "center", justifyContent: "center", position: "relative" },
   badge:           { position: "absolute", top: -4, right: -4, backgroundColor: "#EF4444", borderRadius: 10, minWidth: 18, height: 18, alignItems: "center", justifyContent: "center", paddingHorizontal: 3, borderWidth: 2, borderColor: "#fff" },
   badgeText:       { fontSize: 9, color: "#fff", fontWeight: "900" },
-  grid:            { flexDirection: "row", flexWrap: "wrap", padding: 16, gap: 12 },
-  card:            { width: "30%", backgroundColor: "#fff", borderRadius: 18, paddingVertical: 20, alignItems: "center", gap: 8, elevation: 3, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8 },
-  cardIconWrap:    { width: 50, height: 50, borderRadius: 25, backgroundColor: `${PRIMARY}10`, alignItems: "center", justifyContent: "center" },
-  cardIcon:        { fontSize: 24 },
-  cardText:        { fontSize: 11, fontWeight: "700", color: "#374151", textAlign: "center" },
+
+  // Module grid
+  grid:            { paddingHorizontal: 16, paddingTop: 20, paddingBottom: 32 },
+  gridLabel:       { fontSize: 12, fontWeight: "800", color: "#9CA3AF", letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 14 },
+  gridWrap:        { gap: 10 },
+  card:            { flexDirection: "row", alignItems: "center", backgroundColor: "#fff", borderRadius: 18, paddingVertical: 18, paddingHorizontal: 16, gap: 14, elevation: 3, shadowColor: "#0047AB", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.08, shadowRadius: 10, borderWidth: 1, borderColor: "#EEF2FB", overflow: "hidden" },
+  cardAccent:      { position: "absolute", left: 0, top: 0, bottom: 0, width: 4, borderTopLeftRadius: 18, borderBottomLeftRadius: 18 },
+  cardIconWrap:    { width: 52, height: 52, borderRadius: 16, alignItems: "center", justifyContent: "center" },
+  cardText:        { flex: 1, fontSize: 15, fontWeight: "700", color: "#1F2937" },
+  cardArrow:       { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+
+  // Sidebar
   overlay:         { flex: 1, flexDirection: "row" },
   overlayBg:       { flex: 1, backgroundColor: "rgba(0,0,0,0.45)" },
   sidebar:         { width: 290, backgroundColor: "#fff", height: "100%" },
@@ -425,10 +440,10 @@ const styles = StyleSheet.create({
   sbAvatarText:    { fontSize: 16, fontWeight: "800", color: "#fff" },
   sbName:          { fontSize: 14, fontWeight: "800", color: "#fff" },
   sbMeta:          { fontSize: 11, color: "rgba(255,255,255,0.75)", marginTop: 2 },
-  sbSection:       { paddingHorizontal: 16, paddingTop: 20 },
-  sbSectionLabel:  { fontSize: 10, fontWeight: "800", color: "#9CA3AF", letterSpacing: 1, marginBottom: 10 },
+  sbSection:       { paddingHorizontal: 16, paddingTop: 20, paddingBottom: 10 },
+  sbSectionLabel:  { fontSize: 10, fontWeight: "700", color: "#9CA3AF", letterSpacing: 1, marginBottom: 10, paddingBottom: 4 },
   sbPickerBox:     { borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 12, overflow: "hidden", backgroundColor: "#F9FAFB" },
-  sbPicker:        { height: 48, color: PRIMARY },
+  sbPicker:        { height: 50, color: PRIMARY },
   sbItem:          { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: "#F3F4F6" },
   sbItemIcon:      { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   sbItemLabel:     { flex: 1, fontSize: 14, fontWeight: "600", color: "#374151" },

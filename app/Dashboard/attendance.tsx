@@ -7,6 +7,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { useTheme } from "../ThemeContext";
 
+
 const API_BASE = "https://connect.schoolaid.in";
 
 type AttendanceStatus = "P" | "A" | "L" | "H" | null;

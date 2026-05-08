@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const BASE_URL = "https://connect.schoolaid.in";
 const NOTIF_KEY = "aggregatedNotifications";
+const READ_IDS_KEY = "notif_read_ids"; // ← separate key for read state
 
 export interface AppNotification {
   id: string;
@@ -13,11 +14,9 @@ export interface AppNotification {
   fileUrl?: string | null;
   createdAt: string;
   read: boolean;
-  // used for redirecting
   route: "/Dashboard/noticeboard" | "/Dashboard/schooldiary";
 }
 
-// ─── Fetch notices from API ───────────────────────────────
 const fetchNotices = async (token: string, studentId: string): Promise<AppNotification[]> => {
   try {
     const res = await fetch(
@@ -51,7 +50,6 @@ const fetchNotices = async (token: string, studentId: string): Promise<AppNotifi
   }
 };
 
-// ─── Fetch diary (homework + comments) from API ───────────
 const fetchDiary = async (token: string, studentId: string): Promise<AppNotification[]> => {
   try {
     const res = await fetch(`${BASE_URL}/api/diary/student/${studentId}`, {
@@ -74,13 +72,15 @@ const fetchDiary = async (token: string, studentId: string): Promise<AppNotifica
       return {
         id: `diary_${n.id ?? n._id ?? Math.random()}`,
         type,
-        title: type === "homework" ? `📚 Homework – ${subject}` : `💬 Comment – ${subject}`,
+        title: type === "homework"
+          ? `Homework – ${subject}`
+          : `Comment – ${subject}`,
         body: n.body ?? n.description ?? n.comment ?? "",
         subject,
         dueDate: n.dueDate ?? n.due_date ?? null,
         fileUrl: null,
         createdAt: n.createdAt ?? n.created_at ?? new Date().toISOString(),
-        read: false, // diary items don't have server-side read state
+        read: false,
         route: "/Dashboard/schooldiary" as const,
       };
     });
@@ -89,7 +89,25 @@ const fetchDiary = async (token: string, studentId: string): Promise<AppNotifica
   }
 };
 
-// ─── Main: aggregate both APIs, merge with existing read state ─
+// ─── Get saved read IDs ───────────────────────────────────
+const getReadIds = async (): Promise<Set<string>> => {
+  try {
+    const str = await AsyncStorage.getItem(READ_IDS_KEY);
+    const arr: string[] = str ? JSON.parse(str) : [];
+    return new Set(arr);
+  } catch {
+    return new Set();
+  }
+};
+
+// ─── Save read IDs ────────────────────────────────────────
+const saveReadIds = async (ids: Set<string>): Promise<void> => {
+  try {
+    await AsyncStorage.setItem(READ_IDS_KEY, JSON.stringify([...ids]));
+  } catch {}
+};
+
+// ─── Main aggregate ───────────────────────────────────────
 export const aggregateAndStoreNotifications = async (): Promise<AppNotification[]> => {
   try {
     const token = await AsyncStorage.getItem("token");
@@ -100,7 +118,6 @@ export const aggregateAndStoreNotifications = async (): Promise<AppNotification[
     const studentId = String(child.id ?? "");
     if (!studentId) return [];
 
-    // Fetch both in parallel
     const [notices, diary] = await Promise.all([
       fetchNotices(token, studentId),
       fetchDiary(token, studentId),
@@ -110,10 +127,8 @@ export const aggregateAndStoreNotifications = async (): Promise<AppNotification[
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
 
-    // Preserve read state from previously stored notifications
-    const existingStr = await AsyncStorage.getItem(NOTIF_KEY);
-    const existing: AppNotification[] = existingStr ? JSON.parse(existingStr) : [];
-    const readIds = new Set(existing.filter((n) => n.read).map((n) => n.id));
+    // ✅ Use separate READ_IDS_KEY — survives re-fetch, cleared on logout
+    const readIds = await getReadIds();
 
     const merged = fresh.map((n) => ({
       ...n,
@@ -128,13 +143,19 @@ export const aggregateAndStoreNotifications = async (): Promise<AppNotification[
   }
 };
 
-// ─── Mark one notification as read ───────────────────────
+// ─── Mark one as read ─────────────────────────────────────
 export const markNotificationRead = async (id: string): Promise<void> => {
   try {
+    // Update the list
     const str = await AsyncStorage.getItem(NOTIF_KEY);
     const list: AppNotification[] = str ? JSON.parse(str) : [];
     const updated = list.map((n) => (n.id === id ? { ...n, read: true } : n));
     await AsyncStorage.setItem(NOTIF_KEY, JSON.stringify(updated));
+
+    // ✅ Also persist to READ_IDS_KEY
+    const readIds = await getReadIds();
+    readIds.add(id);
+    await saveReadIds(readIds);
   } catch {}
 };
 
@@ -145,10 +166,14 @@ export const markAllNotificationsRead = async (): Promise<void> => {
     const list: AppNotification[] = str ? JSON.parse(str) : [];
     const updated = list.map((n) => ({ ...n, read: true }));
     await AsyncStorage.setItem(NOTIF_KEY, JSON.stringify(updated));
+
+    // ✅ Persist all IDs to READ_IDS_KEY
+    const readIds = new Set(list.map((n) => n.id));
+    await saveReadIds(readIds);
   } catch {}
 };
 
-// ─── Load stored notifications (no fetch) ─────────────────
+// ─── Load stored (no fetch) ───────────────────────────────
 export const loadStoredNotifications = async (): Promise<AppNotification[]> => {
   try {
     const str = await AsyncStorage.getItem(NOTIF_KEY);
@@ -156,4 +181,9 @@ export const loadStoredNotifications = async (): Promise<AppNotification[]> => {
   } catch {
     return [];
   }
+};
+
+// ─── Clear all notification data (call on logout) ─────────
+export const clearNotificationData = async (): Promise<void> => {
+  await AsyncStorage.multiRemove([NOTIF_KEY, READ_IDS_KEY]);
 };
