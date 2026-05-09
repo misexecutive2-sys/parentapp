@@ -4,7 +4,7 @@ import {
   Text,
   TouchableOpacity,
   ScrollView,
-  SafeAreaView,
+
   Alert,
   ActivityIndicator,
   StyleSheet,
@@ -14,6 +14,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { useTheme } from "../ThemeContext";
 import RazorpayCheckout from "react-native-razorpay";
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 // ── ⚠️  Change this to your actual backend URL ───────────────
 const API_BASE = "https://staging.schoolaid.in"; // e.g. http://192.168.1.5:3001 in local dev
@@ -322,7 +323,7 @@ export default function FeesScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: theme.background }]}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: theme.background }]} edges={['top']}>
 
       {/* ══ HEADER ══ */}
  <View style={[styles.headerTop, { backgroundColor: theme.primary }]}>

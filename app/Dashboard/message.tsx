@@ -1,18 +1,26 @@
-// message.tsx — Full rewrite with:
-// 1. Media Gallery tab (images/videos/files organized)
-// 2. Emoji Reactions (stored locally, long-press to react)
-// 3. Message Status (sent/delivered/read ticks)
-// 4. Better attachment UI (grouped preview strip)
-// 5. Unread badge on header
-// 6. Search messages
-// 7. Read API integration: POST /messages/read/:thread_id
 
+
+// ----------------------------------------- updated code for message card ----------------------------------------
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import {
-  View, Text, TextInput, TouchableOpacity, FlatList,
-  SafeAreaView, KeyboardAvoidingView, Platform, StyleSheet,
-  ActivityIndicator, Alert, Image, Modal, ScrollView,
-  Pressable, Clipboard, Dimensions, StatusBar,
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  FlatList,
+
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  ActivityIndicator,
+  Alert,
+  Image,
+  Modal,
+  ScrollView,
+  Pressable,
+  Clipboard,
+  Dimensions,
+  StatusBar,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
@@ -22,17 +30,33 @@ import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
 import { Audio } from "expo-av";
 import * as FileSystem from "expo-file-system/legacy";
-import { CameraView, useCameraPermissions, useMicrophonePermissions } from "expo-camera";
-import { VideoView, useVideoPlayer } from "expo-video";
-
-import * as MediaLibrary from "expo-media-library";
 import * as Sharing from "expo-sharing";
-const BASE_URL   = "https://connect.schoolaid.in";
-const PRIMARY    = "#0047AB";
-const SCREEN_W   = Dimensions.get("window").width;
-const EMOJIS     = ["👍", "❤️", "😊", "😮", "😢", "😂"];
+import {
+  CameraView,
+  useCameraPermissions,
+  useMicrophonePermissions,
+} from "expo-camera";
+import { VideoView, useVideoPlayer } from "expo-video";
+import * as MediaLibrary from "expo-media-library";
+import {
+  Linking,   // ✅ add this
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-// ── Types ─────────────────────────────────────────────────
+const BASE_URL = "https://connect.schoolaid.in";
+const PRIMARY = "#0047AB";
+const SCREEN_W = Dimensions.get("window").width;
+
+const EMOJI_LIST = [
+  "😀","😁","😂","🤣","😊","😍","🥰","😘","😎","🤩","😅","😆","🙂","🙃",
+  "😉","😋","😜","🤪","😝","🤑","🤗","🤔","🤐","😐","😑","😶","😏","😒",
+  "🙄","😬","😌","😔","😪","🤤","😴","😷","🤒","🤕","🤧","🥵","❤️","🧡",
+  "💛","💚","💙","💜","🖤","💔","💕","💞","👍","👎","👏","🙌","🤝","🙏",
+  "💪","✌️","🤞","👌","🎉","🎊","🎈","🎁","🏆","⭐","🌟","✨","🔥","💯",
+  "😢","😭","😤","😠","😡","🤬","😈","👿","💀","☠️",
+];
+
+// ── Interfaces ─────────────────────────────────────────────
 interface Message {
   id: string;
   text: string;
@@ -53,14 +77,27 @@ interface AttachmentItem {
   mimeType: string;
 }
 
-type TabType = "chat" | "media";
+interface DownloadedFile {
+  key: string;
+  url: string;
+  localUri: string;
+  name: string;
+  type: "file" | "video";
+  savedAt: string;
+  size?: number;
+}
 
-// ── Helpers ───────────────────────────────────────────────
+type TabType = "chat" | "media" | "downloads";
+
+// ── Helpers ────────────────────────────────────────────────
 const buildUrl = (url: string) =>
   url.startsWith("http") ? url : `${BASE_URL}/${url}`;
 
 const formatTime = (iso: string) =>
-  new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+  new Date(iso).toLocaleTimeString("en-IN", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
 const formatDate = (iso: string) => {
   const d = new Date(iso);
@@ -69,105 +106,494 @@ const formatDate = (iso: string) => {
   yesterday.setDate(today.getDate() - 1);
   if (d.toDateString() === today.toDateString()) return "Today";
   if (d.toDateString() === yesterday.toDateString()) return "Yesterday";
-  return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+  return d.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 };
 
-// ── Video Player Modal ────────────────────────────────────
-function VideoPlayerModal({ uri, onClose }: { uri: string; onClose: () => void }) {
-  const player = useVideoPlayer({ uri }, (p) => { p.loop = false; });
+const getMimeType = (name: string): string => {
+  const ext = name.split(".").pop()?.toLowerCase() ?? "";
+  const map: Record<string, string> = {
+    pdf: "application/pdf",
+    doc: "application/msword",
+    docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    xls: "application/vnd.ms-excel",
+    xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ppt: "application/vnd.ms-powerpoint",
+    pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    txt: "text/plain",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    png: "image/png",
+    gif: "image/gif",
+    mp4: "video/mp4",
+    mp3: "audio/mpeg",
+    m4a: "audio/m4a",
+    zip: "application/zip",
+  };
+  return map[ext] ?? "application/octet-stream";
+};
+
+const isImageFile = (name: string) =>
+  ["jpg", "jpeg", "png", "gif", "webp"].includes(
+    name.split(".").pop()?.toLowerCase() ?? ""
+  );
+
+const isPdfFile = (name: string) =>
+  name.split(".").pop()?.toLowerCase() === "pdf";
+
+// ── VideoPlayerModal ────────────────────────────────────────
+function VideoPlayerModal({
+  uri,
+  onClose,
+}: {
+  uri: string;
+  onClose: () => void;
+}) {
+  const player = useVideoPlayer({ uri }, (p) => {
+    p.loop = false;
+  });
   useEffect(() => {
-    const t = setTimeout(() => { try { player.play(); } catch {} }, 300);
+    const t = setTimeout(() => {
+      try { player.play(); } catch {}
+    }, 300);
     return () => clearTimeout(t);
   }, [player]);
+
   return (
     <Modal visible animationType="slide" onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: "#000", justifyContent: "center" }}>
         <TouchableOpacity onPress={onClose} style={s.videoClose}>
           <Ionicons name="close" size={26} color="#fff" />
         </TouchableOpacity>
-        <VideoView player={player} style={{ width: "100%", height: 350 }} contentFit="contain" nativeControls />
+        <VideoView
+          player={player}
+          style={{ width: "100%", height: 350 }}
+          contentFit="contain"
+          nativeControls
+        />
       </View>
     </Modal>
   );
 }
 
-// ── Status Ticks ─────────────────────────────────────────
+// ── InAppFileViewer ─────────────────────────────────────────
+function InAppFileViewer({
+  uri,
+  name,
+  onClose,
+}: {
+  uri: string;
+  name: string;
+  onClose: () => void;
+}) {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const isPdf = isPdfFile(name);
+
+  // For remote URLs that aren't downloaded yet (from chat), use Google Docs viewer
+  const isRemote = uri.startsWith("http");
+  const webViewUri = isRemote
+    ? `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(uri)}`
+    : isPdf
+    ? uri
+    : `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(uri)}`;
+
+  return (
+    <Modal visible animationType="slide" onRequestClose={onClose}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: "#fff" }}>
+        {/* Header */}
+        <View style={fv.header}>
+          <TouchableOpacity onPress={onClose} style={fv.closeBtn}>
+            <Ionicons name="arrow-back" size={22} color="#1F2937" />
+          </TouchableOpacity>
+          <Text style={fv.headerTitle} numberOfLines={1}>{name}</Text>
+          <View style={{ width: 38 }} />
+        </View>
+
+        {error ? (
+          <View style={fv.errorWrap}>
+            <Ionicons name="document-outline" size={56} color="#D1D5DB" />
+            <Text style={fv.errorTitle}>Cannot preview this file</Text>
+            <Text style={fv.errorSub}>
+              This file type is not supported for in-app preview.
+            </Text>
+          </View>
+        ) : isPdf && !isRemote ? (
+          // Native PDF renderer — works fully offline
+          <View style={{ flex: 1 }}>
+            {loading && (
+              <View style={fv.loaderOverlay}>
+                <ActivityIndicator size="large" color={PRIMARY} />
+                <Text style={fv.loaderText}>Loading PDF...</Text>
+              </View>
+            )}
+            {/* <Pdf
+              source={{ uri, cache: true }}
+              style={{ flex: 1 }}
+              onLoadComplete={() => setLoading(false)}
+              onError={() => { setLoading(false); setError(true); }}
+              enablePaging
+              trustAllCerts={false}
+            /> */}
+          </View>
+        ) : (
+          // WebView for remote files or non-PDF local files
+          <View style={{ flex: 1 }}>
+            {loading && (
+              <View style={fv.loaderOverlay}>
+                <ActivityIndicator size="large" color={PRIMARY} />
+                <Text style={fv.loaderText}>Loading document...</Text>
+              </View>
+            )}
+            {/* <WebView
+              source={{ uri: webViewUri }}
+              style={{ flex: 1 }}
+              onLoad={() => setLoading(false)}
+              onError={() => { setLoading(false); setError(true); }}
+              startInLoadingState={false}
+              javaScriptEnabled
+              domStorageEnabled
+            /> */}
+          </View>
+        )}
+      </SafeAreaView>
+    </Modal>
+  );
+}
+
+// ── AudioPlayerModal ────────────────────────────────────────
+function AudioPlayerModal({
+  uri,
+  name,
+  onClose,
+}: {
+  uri: string;
+  name: string;
+  onClose: () => void;
+}) {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [duration, setDuration] = useState(0);
+  const [position, setPosition] = useState(0);
+  const soundRef = useRef<Audio.Sound | null>(null);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: false,
+          shouldDuckAndroid: true,
+          playThroughEarpieceAndroid: false,
+        });
+        const { sound } = await Audio.Sound.createAsync(
+          { uri: uri.startsWith("http") ? buildUrl(uri) : uri },
+          { shouldPlay: false, volume: 1.0 }
+        );
+        soundRef.current = sound;
+        setIsLoading(false);
+        sound.setOnPlaybackStatusUpdate((status) => {
+          if (!status.isLoaded) return;
+          setIsPlaying(status.isPlaying);
+          setPosition(status.positionMillis ?? 0);
+          setDuration(status.durationMillis ?? 0);
+          if (status.didJustFinish) {
+            setIsPlaying(false);
+            setPosition(0);
+            sound.setPositionAsync(0);
+          }
+        });
+      } catch {
+        setIsLoading(false);
+      }
+    };
+    load();
+    return () => {
+      soundRef.current?.unloadAsync();
+    };
+  }, [uri]);
+
+  const togglePlay = async () => {
+    if (!soundRef.current) return;
+    if (isPlaying) {
+      await soundRef.current.pauseAsync();
+    } else {
+      await soundRef.current.playAsync();
+    }
+  };
+
+  const formatMs = (ms: number) => {
+    const totalSec = Math.floor(ms / 1000);
+    const m = Math.floor(totalSec / 60);
+    const sec = totalSec % 60;
+    return `${m}:${sec.toString().padStart(2, "0")}`;
+  };
+
+  const progress = duration > 0 ? position / duration : 0;
+  const bars = [4, 8, 14, 10, 6, 12, 16, 8, 5, 11, 9, 14, 7, 10, 6, 12, 8, 14, 5, 10];
+
+  return (
+    <Modal visible animationType="slide" transparent onRequestClose={onClose}>
+      <View style={fv.audioOverlay}>
+        <View style={fv.audioCard}>
+          {/* Close */}
+          <TouchableOpacity onPress={onClose} style={fv.audioClose}>
+            <Ionicons name="close" size={20} color="#6B7280" />
+          </TouchableOpacity>
+
+          {/* Icon */}
+          <View style={fv.audioIconWrap}>
+            <Ionicons name="mic" size={32} color={PRIMARY} />
+          </View>
+
+          <Text style={fv.audioTitle} numberOfLines={1}>{name}</Text>
+          <Text style={fv.audioSubtitle}>Voice Note</Text>
+
+          {/* Waveform */}
+          <View style={fv.waveformWrap}>
+            {bars.map((h, i) => {
+              const barProgress = i / bars.length;
+              const filled = barProgress <= progress;
+              return (
+                <View
+                  key={i}
+                  style={[
+                    fv.waveBar,
+                    {
+                      height: h * 2,
+                      backgroundColor: filled ? PRIMARY : "#E5E7EB",
+                    },
+                  ]}
+                />
+              );
+            })}
+          </View>
+
+          {/* Time */}
+          <View style={fv.audioTimeRow}>
+            <Text style={fv.audioTime}>{formatMs(position)}</Text>
+            <Text style={fv.audioTime}>{formatMs(duration)}</Text>
+          </View>
+
+          {/* Play button */}
+          {isLoading ? (
+            <ActivityIndicator size="large" color={PRIMARY} style={{ marginTop: 16 }} />
+          ) : (
+            <TouchableOpacity onPress={togglePlay} style={fv.audioPlayBtn} activeOpacity={0.85}>
+              <Ionicons
+                name={isPlaying ? "pause" : "play"}
+                size={28}
+                color="#fff"
+              />
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+// ── InAppFileViewer styles ──────────────────────────────────
+const fv = StyleSheet.create({
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E7EB",
+    backgroundColor: "#fff",
+    gap: 10,
+  },
+  closeBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "#F3F4F6",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerTitle: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#1F2937",
+    textAlign: "center",
+  },
+  loaderOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fff",
+    gap: 12,
+    zIndex: 10,
+  },
+  loaderText: { fontSize: 13, color: PRIMARY, fontWeight: "600" },
+  errorWrap: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    padding: 30,
+  },
+  errorTitle: { fontSize: 16, fontWeight: "700", color: "#1F2937" },
+  errorSub: {
+    fontSize: 13,
+    color: "#9CA3AF",
+    textAlign: "center",
+    lineHeight: 20,
+  },
+  // Audio modal
+  audioOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  audioCard: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    alignItems: "center",
+    paddingBottom: 40,
+  },
+  audioClose: {
+    alignSelf: "flex-end",
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#F3F4F6",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
+  audioIconWrap: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: "#EEF3FF",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 14,
+  },
+  audioTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#1F2937",
+    marginBottom: 4,
+    maxWidth: 260,
+    textAlign: "center",
+  },
+  audioSubtitle: { fontSize: 12, color: "#9CA3AF", marginBottom: 24 },
+  waveformWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    height: 40,
+    marginBottom: 10,
+  },
+  waveBar: { width: 4, borderRadius: 3 },
+  audioTimeRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: "100%",
+    marginBottom: 24,
+    paddingHorizontal: 4,
+  },
+  audioTime: { fontSize: 12, color: "#9CA3AF", fontWeight: "600" },
+  audioPlayBtn: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: PRIMARY,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+});
+
+// ── StatusTick ──────────────────────────────────────────────
 function StatusTick({ status }: { status?: string }) {
-  if (!status || status === "sending") return <Ionicons name="time-outline" size={11} color="rgba(255,255,255,0.5)" />;
-  if (status === "sent")      return <Ionicons name="checkmark-outline" size={11} color="rgba(255,255,255,0.7)" />;
-  if (status === "delivered") return <Ionicons name="checkmark-done-outline" size={11} color="rgba(255,255,255,0.7)" />;
-  if (status === "read")      return <Ionicons name="checkmark-done-outline" size={11} color="#60D4F7" />;
+  if (!status || status === "sending")
+    return <Ionicons name="time-outline" size={11} color="rgba(255,255,255,0.5)" />;
+  if (status === "sent")
+    return <Ionicons name="checkmark-outline" size={11} color="rgba(255,255,255,0.7)" />;
+  if (status === "delivered")
+    return <Ionicons name="checkmark-done-outline" size={11} color="rgba(255,255,255,0.7)" />;
+  if (status === "read")
+    return <Ionicons name="checkmark-done-outline" size={11} color="#60D4F7" />;
   return null;
 }
 
-// ── Main Screen ───────────────────────────────────────────
+// ── Main Component ──────────────────────────────────────────
 export default function MessageScreen() {
   const { theme } = useTheme();
-  const router    = useRouter();
+  const router = useRouter();
   const { childId, childName, classname, sectionname } = useLocalSearchParams<{
-    childId: string; childName: string; classname: string; sectionname: string;
+    childId: string;
+    childName: string;
+    classname: string;
+    sectionname: string;
   }>();
 
-  const [showEmojiKeyboard, setShowEmojiKeyboard] = useState(false);
-
-  // ── State ─────────────────────────────────────────────
-  const [messages,         setMessages]         = useState<Message[]>([]);
-  const [inputText,        setInputText]        = useState("");
-  const [loading,          setLoading]          = useState(true);
-  const [sending,          setSending]          = useState(false);
-  const [token,            setToken]            = useState("");
-  const [threadId,         setThreadId]         = useState<number | null>(null);
-  const [attachments,      setAttachments]      = useState<AttachmentItem[]>([]);
-  const [previewItem,      setPreviewItem]      = useState<{ uri: string; type: "image" | "file"; name?: string } | null>(null);
-  const [contextMsg,       setContextMsg]       = useState<Message | null>(null);
-  const [replyTo,          setReplyTo]          = useState<Message | null>(null);
-  const [editingMsg,       setEditingMsg]       = useState<Message | null>(null);
-  const [pinnedIds,        setPinnedIds]        = useState<string[]>([]);
-  const [isRecording,      setIsRecording]      = useState(false);
-  const [isTranscribing,   setIsTranscribing]   = useState(false);
-  const [playingId,        setPlayingId]        = useState<string | null>(null);
-  const [showCamera,       setShowCamera]       = useState(false);
-  const [cameraFacing,     setCameraFacing]     = useState<"front" | "back">("back");
+  // ── State ─────────────────────────────────────────────────
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [inputText, setInputText] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
+  const [token, setToken] = useState("");
+  const [threadId, setThreadId] = useState<number | null>(null);
+  const [attachments, setAttachments] = useState<AttachmentItem[]>([]);
+  const [previewItem, setPreviewItem] = useState<{
+    uri: string;
+    type: "image" | "file";
+    name?: string;
+  } | null>(null);
+  const [contextMsg, setContextMsg] = useState<Message | null>(null);
+  const [replyTo, setReplyTo] = useState<Message | null>(null);
+  const [editingMsg, setEditingMsg] = useState<Message | null>(null);
+  const [pinnedIds, setPinnedIds] = useState<string[]>([]);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [playingId, setPlayingId] = useState<string | null>(null);
+  const [showCamera, setShowCamera] = useState(false);
+  const [cameraFacing, setCameraFacing] = useState<"front" | "back">("back");
   const [isVideoRecording, setIsVideoRecording] = useState(false);
-  const [previewVideo,     setPreviewVideo]     = useState<string | null>(null);
-  const [reactions,        setReactions]        = useState<Record<string, string[]>>({});
-  const [showEmojiFor,     setShowEmojiFor]     = useState<string | null>(null);
-  const [activeTab,        setActiveTab]        = useState<TabType>("chat");
-  const [searchQuery,      setSearchQuery]      = useState("");
-  const [showSearch,       setShowSearch]       = useState(false);
-  const [unreadCount,      setUnreadCount]      = useState(0);
+  const [previewVideo, setPreviewVideo] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<TabType>("chat");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showSearch, setShowSearch] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [downloads, setDownloads] = useState<Record<string, "downloading" | "done">>({});
+  const [mediaSubTab, setMediaSubTab] = useState<"photos" | "docs">("photos");
+  const [filesExpanded, setFilesExpanded] = useState(true);
+  const [voiceExpanded, setVoiceExpanded] = useState(true);
+  const [savedFiles, setSavedFiles] = useState<DownloadedFile[]>([]);
+  // const [fileViewer, setFileViewer] = useState<{ uri: string; name: string } | null>(null);
+  const [audioPlayer, setAudioPlayer] = useState<{ uri: string; name: string } | null>(null);
 
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
-  const [micPermission,    requestMicPermission]    = useMicrophonePermissions();
+  const [micPermission, requestMicPermission] = useMicrophonePermissions();
 
-  // ── Refs ──────────────────────────────────────────────
-  const flatListRef   = useRef<FlatList>(null);
-  const inputRef      = useRef<TextInput>(null);
+  // ── Refs ───────────────────────────────────────────────────
+  const flatListRef = useRef<FlatList>(null);
+  const inputRef = useRef<TextInput>(null);
   const contextMsgRef = useRef<Message | null>(null);
   const editingMsgRef = useRef<Message | null>(null);
-  const pinnedIdsRef  = useRef<string[]>([]);
-  const inputTextRef  = useRef("");
-  const soundRef      = useRef<Audio.Sound | null>(null);
-  const recordingRef  = useRef<Audio.Recording | null>(null);
-  const cameraRef     = useRef<CameraView>(null);
+  const pinnedIdsRef = useRef<string[]>([]);
+  const soundRef = useRef<Audio.Sound | null>(null);
+  const recordingRef = useRef<Audio.Recording | null>(null);
+  const cameraRef = useRef<CameraView>(null);
 
   useEffect(() => { contextMsgRef.current = contextMsg; }, [contextMsg]);
   useEffect(() => { editingMsgRef.current = editingMsg; }, [editingMsg]);
-  useEffect(() => { pinnedIdsRef.current  = pinnedIds;  }, [pinnedIds]);
-  useEffect(() => { inputTextRef.current  = inputText;  }, [inputText]);
+  useEffect(() => { pinnedIdsRef.current = pinnedIds; }, [pinnedIds]);
   useEffect(() => () => { soundRef.current?.unloadAsync(); }, []);
 
-  // ── Load reactions from storage ───────────────────────
-  const loadReactions = async () => {
-    try {
-      const raw = await AsyncStorage.getItem(`reactions_${childId}`);
-      if (raw) setReactions(JSON.parse(raw));
-    } catch {}
-  };
-
-  const saveReactions = async (updated: Record<string, string[]>) => {
-    await AsyncStorage.setItem(`reactions_${childId}`, JSON.stringify(updated));
-  };
+  const DOWNLOADS_STORAGE_KEY = `savedFiles_${childId}`;
 
   const loadPinned = async () => {
     try {
@@ -176,17 +602,34 @@ export default function MessageScreen() {
     } catch {}
   };
 
-  // ── Mark thread as read via API ───────────────────────
-  const markThreadRead = async (tid: number, t: string) => {
+  const loadSavedFiles = async () => {
     try {
-      await fetch(`${BASE_URL}/api/messages/read/${tid}`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${t}` },
-      });
+      const raw = await AsyncStorage.getItem(DOWNLOADS_STORAGE_KEY);
+      if (raw) setSavedFiles(JSON.parse(raw));
     } catch {}
   };
 
-  // ── Fetch Messages ────────────────────────────────────
+  const persistSavedFile = async (entry: DownloadedFile) => {
+    try {
+      const raw = await AsyncStorage.getItem(DOWNLOADS_STORAGE_KEY);
+      const current: DownloadedFile[] = raw ? JSON.parse(raw) : [];
+      const updated = [entry, ...current.filter((f) => f.url !== entry.url)];
+      await AsyncStorage.setItem(DOWNLOADS_STORAGE_KEY, JSON.stringify(updated));
+      setSavedFiles(updated);
+    } catch {}
+  };
+
+  const removeSavedFile = async (key: string) => {
+    try {
+      const raw = await AsyncStorage.getItem(DOWNLOADS_STORAGE_KEY);
+      const current: DownloadedFile[] = raw ? JSON.parse(raw) : [];
+      const updated = current.filter((f) => f.key !== key);
+      await AsyncStorage.setItem(DOWNLOADS_STORAGE_KEY, JSON.stringify(updated));
+      setSavedFiles(updated);
+    } catch {}
+  };
+
+  // ── Fetch messages ─────────────────────────────────────────
   const fetchMessages = async (t: string, newThreadId?: number) => {
     setLoading(true);
     try {
@@ -207,43 +650,48 @@ export default function MessageScreen() {
             );
             if (!res.ok) return [];
             const data = await res.json();
-            // Mark as read when fetched
-            await markThreadRead(tid, t);
             return data.data ?? data ?? [];
           } catch { return []; }
         })
       );
 
-      const combined = allArrays.flat().sort((a: any, b: any) =>
-        new Date(a.created_at ?? a.createdAt).getTime() -
-        new Date(b.created_at ?? b.createdAt).getTime()
-      );
+      const combined = allArrays
+        .flat()
+        .sort((a: any, b: any) =>
+          new Date(a.created_at ?? a.createdAt).getTime() -
+          new Date(b.created_at ?? b.createdAt).getTime()
+        );
 
       const mapped: Message[] = combined.map((m: any) => {
         const attachName = m.attachment_name ?? undefined;
-        const attachUrl  = m.attachment_url  ?? undefined;
-        const isVideo = attachName?.endsWith(".mp4") || attachName?.includes("video_") || attachUrl?.endsWith(".mp4");
-        const isVoice = attachName?.endsWith(".m4a") || attachName?.includes("voice_") || attachUrl?.endsWith(".m4a") || attachUrl?.includes("voice_");
+        const attachUrl = m.attachment_url ?? undefined;
+        const isVideo =
+          attachName?.endsWith(".mp4") || attachName?.includes("video_") || attachUrl?.endsWith(".mp4");
+        const isVoice =
+          attachName?.endsWith(".m4a") || attachName?.includes("voice_") ||
+          attachUrl?.endsWith(".m4a") || attachUrl?.includes("voice_");
         const attachType = isVideo ? "video" : isVoice ? "file" : attachUrl ? "image" : undefined;
         const senderIsTeacher = m.sender_type === "teacher";
         return {
-          id:             String(m.id ?? m._id ?? Math.random()),
-          text:           m.message ?? m.body ?? m.text ?? "",
-          sender:         senderIsTeacher ? "teacher" : "parent",
-          createdAt:      m.created_at ?? m.createdAt ?? new Date().toISOString(),
-          attachmentUrl:  attachUrl,
+          id: String(m.id ?? m._id ?? Math.random()),
+          text: (() => {
+            const raw = m.message ?? m.body ?? m.text ?? "";
+            try { return decodeURIComponent(raw); } catch { return raw; }
+          })(),
+          sender: senderIsTeacher ? "teacher" : "parent",
+          createdAt: m.created_at ?? m.createdAt ?? new Date().toISOString(),
+          attachmentUrl: attachUrl,
           attachmentType: attachType,
           attachmentName: attachName,
-          replyToId:      m.reply_to_id ? String(m.reply_to_id) : undefined,
-          replyToText:    m.reply_to_text ?? m.reply_message ?? undefined,
-          status:         senderIsTeacher ? undefined : (m.is_read ? "read" : m.is_delivered ? "delivered" : "sent"),
+          replyToId: m.reply_to_id ? String(m.reply_to_id) : undefined,
+          replyToText: m.reply_to_text ?? m.reply_message ?? undefined,
+          status: senderIsTeacher
+            ? undefined
+            : m.is_read ? "read" : m.is_delivered ? "delivered" : "sent",
         };
       });
 
       setMessages(mapped);
-      // Count teacher messages as unread (not yet read by parent)
-      const unread = mapped.filter(m => m.sender === "teacher").length;
-      setUnreadCount(0); // reset since we just marked as read
     } catch (err) {
       console.error("Fetch messages error:", err);
     } finally {
@@ -251,49 +699,246 @@ export default function MessageScreen() {
     }
   };
 
-  // ── Focus ─────────────────────────────────────────────
-  useFocusEffect(useCallback(() => {
-    const init = async () => {
-      const t = await AsyncStorage.getItem("token");
-      if (t) { setToken(t); fetchMessages(t); }
-      await loadPinned();
-      await loadReactions();
-    };
-    init();
-  }, [childId]));
+  useFocusEffect(
+    useCallback(() => {
+      const init = async () => {
+        const t = await AsyncStorage.getItem("token");
+        if (t) {
+          setToken(t);
+          await fetchMessages(t);
+          const savedRaw = await AsyncStorage.getItem(`allThreadIds_${childId}`);
+          const savedIds: number[] = savedRaw ? JSON.parse(savedRaw) : [];
+          if (savedIds.length > 0) setThreadId(savedIds[savedIds.length - 1]);
+        }
+        await loadPinned();
+        await loadSavedFiles();
+      };
+      init();
+    }, [childId])
+  );
 
-  // ── Emoji Reaction ────────────────────────────────────
-  const handleReact = async (msgId: string, emoji: string) => {
-    setShowEmojiFor(null);
-    setContextMsg(null);
-    const current = reactions[msgId] ?? [];
-    const already = current.includes(emoji);
-    const updated = {
-      ...reactions,
-      [msgId]: already ? current.filter(e => e !== emoji) : [...current, emoji],
-    };
-    setReactions(updated);
-    await saveReactions(updated);
+  useEffect(() => {
+    if (!token || !threadId) return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(
+          `${BASE_URL}/api/parent-notes/threads/${threadId}/messages`,
+          { headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } }
+        );
+        if (!res.ok) return;
+        const data = await res.json();
+        const msgs: any[] = data.data ?? data ?? [];
+        setMessages((prev) => {
+          const hasUnread = prev.some((m) => m.sender === "parent" && m.status !== "read");
+          if (!hasUnread) return prev;
+          return prev.map((m) => {
+            if (m.sender !== "parent" || m.status === "read") return m;
+            const serverMsg = msgs.find((sm) => String(sm.id) === String(m.id));
+            if (!serverMsg) return m;
+            const newStatus = serverMsg.is_read ? "read" : serverMsg.is_delivered ? "delivered" : "sent";
+            return newStatus !== m.status ? { ...m, status: newStatus } : m;
+          });
+        });
+      } catch {}
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [token, threadId]);
+
+  // ── Download file/video ────────────────────────────────────
+const downloadFile = async (url: string, name: string, type: "file" | "video") => {
+  const key = url;
+  if (downloads[key] === "downloading") return;
+ 
+  // ✅ Build full URL ONCE and log it to debug
+  const fullUrl = url.startsWith("http") ? url : `${BASE_URL}/${url.replace(/^\//, "")}`;
+  console.log("[DOWNLOAD] key:", key);
+  console.log("[DOWNLOAD] fullUrl:", fullUrl);
+ 
+  setDownloads((prev) => ({ ...prev, [key]: "downloading" }));
+ 
+  try {
+    if (type === "video") {
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission required", "Please allow media library access to save videos.");
+        setDownloads((prev) => { const n = { ...prev }; delete n[key]; return n; });
+        return;
+      }
+    }
+ 
+    // ✅ Always use documentDirectory — cacheDirectory gets cleared by OS
+    const folder = `${FileSystem.documentDirectory}SchoolAid/`;
+    await FileSystem.makeDirectoryAsync(folder, { intermediates: true });
+ 
+    // ✅ Unique name with timestamp to avoid collisions
+    const safeFileName = `${Date.now()}_${name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+    const destUri = `${folder}${safeFileName}`;
+ 
+    console.log("[DOWNLOAD] saving to:", destUri);
+ 
+    // ✅ Auth token in headers
+    const downloadRes = await FileSystem.downloadAsync(fullUrl, destUri, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "*/*",
+      },
+    });
+ 
+    console.log("[DOWNLOAD] status:", downloadRes.status);
+ 
+    if (downloadRes.status !== 200) {
+      throw new Error(`HTTP ${downloadRes.status}`);
+    }
+ 
+    const fileInfo = (await FileSystem.getInfoAsync(downloadRes.uri)) as any;
+    console.log("[DOWNLOAD] fileInfo:", fileInfo);
+ 
+    if (!fileInfo.exists || (fileInfo.size ?? 0) === 0) {
+      throw new Error("Downloaded file is empty or missing");
+    }
+ 
+    if (type === "video") {
+      const asset = await MediaLibrary.createAssetAsync(downloadRes.uri);
+      let album = await MediaLibrary.getAlbumAsync("SchoolAid");
+      if (!album) album = await MediaLibrary.createAlbumAsync("SchoolAid", asset, false);
+      else await MediaLibrary.addAssetsToAlbumAsync([asset], album, false);
+ 
+      setDownloads((prev) => ({ ...prev, [key]: "done" }));
+      await persistSavedFile({
+        key: `${url}_${Date.now()}`,
+        url,
+        localUri: downloadRes.uri,
+        name,
+        type: "video",
+        savedAt: new Date().toISOString(),
+      });
+      Alert.alert("Saved!", "Video saved to Photos > SchoolAid album.\nAlso visible in the Downloads tab.");
+    } else {
+      setDownloads((prev) => ({ ...prev, [key]: "done" }));
+      await persistSavedFile({
+        key: `${url}_${Date.now()}`,
+        url,
+        localUri: downloadRes.uri,
+        name,
+        type: "file",
+        savedAt: new Date().toISOString(),
+        size: fileInfo.size ?? undefined,
+      });
+      Alert.alert("Downloaded!", `"${name}" saved.\nFind it in the Downloads tab.`);
+    }
+  } catch (err: any) {
+    console.error("[DOWNLOAD] error:", err?.message ?? err);
+    setDownloads((prev) => { const n = { ...prev }; delete n[key]; return n; });
+    Alert.alert("Download Failed", `Error: ${err?.message ?? "Unknown error"}\n\nURL: ${fullUrl}`);
+  }
+};
+
+
+  // ── Open any file in-app ───────────────────────────────────
+const openInApp = async (uri: string, name: string) => {
+  const n = name.toLowerCase();
+  const isVoice = n.endsWith(".m4a") || n.includes("voice_") || uri.includes("voice_");
+  const isVideo = n.endsWith(".mp4") || n.includes("video_") || uri.includes("video_");
+  const isImage = ["jpg", "jpeg", "png", "gif", "webp"].includes(n.split(".").pop() ?? "");
+ 
+  const fullUrl = uri.startsWith("http") ? uri : `${BASE_URL}/${uri.replace(/^\//, "")}`;
+ 
+  if (isVideo) {
+    setPreviewVideo(fullUrl);
+  } else if (isVoice || n.endsWith(".mp3")) {
+    setAudioPlayer({ uri: fullUrl, name });
+  } else if (isImage) {
+    setPreviewItem({ uri: fullUrl, type: "image", name });
+  } else {
+    // PDF / DOC / XLSX etc.
+    // For REMOTE files: download to temp, then share so Android can open it
+    // This fixes the blank black screen issue
+    try {
+      const safeFileName = `temp_${Date.now()}_${name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+      const tempUri = `${FileSystem.cacheDirectory}${safeFileName}`;
+ 
+      // Show a brief loading indicator by using Alert (or you can add a state)
+      const downloadRes = await FileSystem.downloadAsync(fullUrl, tempUri, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+ 
+      if (downloadRes.status !== 200) {
+        Alert.alert("Error", `Could not load file (HTTP ${downloadRes.status})`);
+        return;
+      }
+ 
+      const canShare = await Sharing.isAvailableAsync();
+      if (canShare) {
+        await Sharing.shareAsync(downloadRes.uri, {
+          mimeType: getMimeType(name),
+          dialogTitle: `Open ${name}`,
+          UTI: n.endsWith(".pdf") ? "com.adobe.pdf" : "public.data",
+        });
+      } else {
+        Alert.alert("Cannot open", "No app found to open this file. Please install a PDF reader or file manager.");
+      }
+    } catch (err: any) {
+      console.error("[openInApp] error:", err);
+      Alert.alert("Error", "Could not open file. Please try downloading it first.");
+    }
+  }
+};
+  // ── DownloadIcon ───────────────────────────────────────────
+  const DownloadIcon = ({
+    url, name, type, tintColor,
+  }: { url: string; name: string; type: "file" | "video"; tintColor: string }) => {
+    const state = downloads[url];
+    if (state === "downloading") return <ActivityIndicator size="small" color={tintColor} />;
+    return (
+      <TouchableOpacity
+        onPress={() => downloadFile(url, name, type)}
+        style={s.downloadBtn}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      >
+        <Ionicons
+          name={state === "done" ? "checkmark-circle" : "arrow-down-circle-outline"}
+          size={22}
+          color={state === "done" ? "#22C55E" : tintColor}
+        />
+      </TouchableOpacity>
+    );
   };
 
-  // ── Attachments ───────────────────────────────────────
+  const handleEmojiSelect = (emoji: string) => setInputText((prev) => prev + emoji);
+
+  // ── Image picker ───────────────────────────────────────────
   const pickImage = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) { Alert.alert("Permission required", "Please allow access to your photo library."); return; }
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.8, allowsMultipleSelection: true });
+    if (!permission.granted) {
+      Alert.alert("Permission required", "Please allow access to your photo library.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"], quality: 0.8, allowsMultipleSelection: true,
+    });
     if (!result.canceled && result.assets.length > 0) {
-      setAttachments(prev => [...prev, ...result.assets.map(a => ({
-        uri: a.uri, type: "image" as const, name: a.fileName ?? "image.jpg", mimeType: a.mimeType ?? "image/jpeg",
-      }))]);
+      setAttachments((prev) => [
+        ...prev,
+        ...result.assets.map((a) => ({
+          uri: a.uri, type: "image" as const,
+          name: a.fileName ?? "image.jpg", mimeType: a.mimeType ?? "image/jpeg",
+        })),
+      ]);
     }
   };
 
   const pickFile = async () => {
-    const result = await DocumentPicker.getDocumentAsync({ type: "*/*", copyToCacheDirectory: true, multiple: true });
+    const result = await DocumentPicker.getDocumentAsync({
+      type: "*/*", copyToCacheDirectory: true, multiple: true,
+    });
     if (!result.canceled && result.assets.length > 0) {
-      setAttachments(prev => [...prev, ...result.assets.map(a => ({
-        uri: a.uri, type: "file" as const, name: a.name, mimeType: a.mimeType ?? "application/octet-stream",
-      }))]);
+      setAttachments((prev) => [
+        ...prev,
+        ...result.assets.map((a) => ({
+          uri: a.uri, type: "file" as const,
+          name: a.name, mimeType: a.mimeType ?? "application/octet-stream",
+        })),
+      ]);
     }
   };
 
@@ -309,31 +954,40 @@ export default function MessageScreen() {
     setShowCamera(true);
   };
 
-  const showAttachmentOptions = () => Alert.alert("Attach", "Choose attachment type", [
-    { text: "Photo",  onPress: pickImage  },
-    { text: "File",   onPress: pickFile   },
-    { text: "Video",  onPress: openCamera },
-    { text: "Cancel", style: "cancel"     },
-  ]);
+  const showAttachmentOptions = () =>
+    Alert.alert("Attach", "Choose attachment type", [
+      { text: "Photo", onPress: pickImage },
+      { text: "File", onPress: pickFile },
+      { text: "Video", onPress: openCamera },
+      { text: "Cancel", style: "cancel" },
+    ]);
 
-  const removeAttachment = (idx: number) => setAttachments(prev => prev.filter((_, i) => i !== idx));
+  const removeAttachment = (idx: number) =>
+    setAttachments((prev) => prev.filter((_, i) => i !== idx));
 
-  // ── Voice Recording ───────────────────────────────────
+  // ── Voice recording ────────────────────────────────────────
   const startRecording = async () => {
     try {
       const { granted } = await Audio.requestPermissionsAsync();
       if (!granted) { Alert.alert("Permission required", "Please allow microphone access."); return; }
       await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
       const { recording } = await Audio.Recording.createAsync({
-        android: { extension: ".m4a", outputFormat: Audio.AndroidOutputFormat.MPEG_4, audioEncoder: Audio.AndroidAudioEncoder.AAC, sampleRate: 44100, numberOfChannels: 2, bitRate: 128000 },
-        ios:     { extension: ".m4a", outputFormat: Audio.IOSOutputFormat.MPEG4AAC, audioQuality: Audio.IOSAudioQuality.HIGH, sampleRate: 44100, numberOfChannels: 2, bitRate: 128000, linearPCMBitDepth: 16, linearPCMIsBigEndian: false, linearPCMIsFloat: false },
+        android: {
+          extension: ".m4a", outputFormat: Audio.AndroidOutputFormat.MPEG_4,
+          audioEncoder: Audio.AndroidAudioEncoder.AAC, sampleRate: 44100,
+          numberOfChannels: 2, bitRate: 128000,
+        },
+        ios: {
+          extension: ".m4a", outputFormat: Audio.IOSOutputFormat.MPEG4AAC,
+          audioQuality: Audio.IOSAudioQuality.HIGH, sampleRate: 44100,
+          numberOfChannels: 2, bitRate: 128000, linearPCMBitDepth: 16,
+          linearPCMIsBigEndian: false, linearPCMIsFloat: false,
+        },
         web: {},
       });
       recordingRef.current = recording;
       setIsRecording(true);
-    } catch (err) {
-      Alert.alert("Error", "Could not start recording.");
-    }
+    } catch { Alert.alert("Error", "Could not start recording."); }
   };
 
   const stopRecording = async () => {
@@ -349,74 +1003,49 @@ export default function MessageScreen() {
       if (!tempUri) throw new Error("No recording URI");
       const baseDir = FileSystem.documentDirectory ?? FileSystem.cacheDirectory;
       if (!baseDir) throw new Error("No writable directory");
-      const fileName     = `voice_${Date.now()}.m4a`;
+      const fileName = `voice_${Date.now()}.m4a`;
       const permanentUri = `${baseDir}${fileName}`;
       await FileSystem.copyAsync({ from: tempUri, to: permanentUri });
-      const fileInfo = await FileSystem.getInfoAsync(permanentUri) as any;
-      if (!fileInfo.exists || (fileInfo.size ?? 0) === 0) throw new Error("Recording file empty or missing");
-      setAttachments(prev => [...prev, { uri: permanentUri, type: "file", name: fileName, mimeType: "audio/m4a" }]);
-    } catch (err: any) {
-      Alert.alert("Error", "Could not process recording.");
-    } finally {
-      setIsTranscribing(false);
-    }
+      const fileInfo = (await FileSystem.getInfoAsync(permanentUri)) as any;
+      if (!fileInfo.exists || (fileInfo.size ?? 0) === 0) throw new Error("Recording file empty");
+      setAttachments((prev) => [
+        ...prev,
+        { uri: permanentUri, type: "file", name: fileName, mimeType: "audio/m4a" },
+      ]);
+    } catch { Alert.alert("Error", "Could not process recording."); }
+    finally { setIsTranscribing(false); }
   };
 
-  // ── Video Recording ───────────────────────────────────
   const startVideoRecording = async () => {
     if (!cameraRef.current) return;
     try {
       setIsVideoRecording(true);
       const video = await cameraRef.current.recordAsync({ maxDuration: 60 });
       if (!video?.uri) throw new Error("No video URI");
-      const fileName     = `video_${Date.now()}.mp4`;
-      const baseDir      = FileSystem.documentDirectory ?? FileSystem.cacheDirectory ?? "";
+      const fileName = `video_${Date.now()}.mp4`;
+      const baseDir = FileSystem.documentDirectory ?? FileSystem.cacheDirectory ?? "";
       const permanentUri = `${baseDir}${fileName}`;
       await FileSystem.copyAsync({ from: video.uri, to: permanentUri });
       const fileInfo = await FileSystem.getInfoAsync(permanentUri);
       if (!fileInfo.exists) throw new Error("Video file missing");
-      setAttachments(prev => [...prev, { uri: permanentUri, type: "video", name: fileName, mimeType: "video/mp4" }]);
+      setAttachments((prev) => [
+        ...prev,
+        { uri: permanentUri, type: "video", name: fileName, mimeType: "video/mp4" },
+      ]);
       setShowCamera(false);
-    } catch (err) {
-      Alert.alert("Error", "Could not record video.");
-    } finally {
-      setIsVideoRecording(false);
-    }
+    } catch { Alert.alert("Error", "Could not record video."); }
+    finally { setIsVideoRecording(false); }
   };
 
   const stopVideoRecording = () => cameraRef.current?.stopRecording();
 
-  // ── Voice Playback ────────────────────────────────────
+  // ── Voice playback (chat bubbles) ──────────────────────────
   const handlePlayVoice = useCallback(async (url: string, msgId: string) => {
-    try {
-      if (soundRef.current) {
-        await soundRef.current.stopAsync();
-        await soundRef.current.unloadAsync();
-        soundRef.current = null;
-        setPlayingId(null);
-        if (playingId === msgId) return;
-      }
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false, playsInSilentModeIOS: true,
-        staysActiveInBackground: false, shouldDuckAndroid: true,
-        playThroughEarpieceAndroid: false,
-      });
-      const { sound } = await Audio.Sound.createAsync({ uri: buildUrl(url) }, { shouldPlay: false, volume: 1.0 });
-      soundRef.current = sound;
-      setPlayingId(msgId);
-      sound.setOnPlaybackStatusUpdate((status) => {
-        if (!status.isLoaded) return;
-        if (status.didJustFinish) { sound.unloadAsync(); soundRef.current = null; setPlayingId(null); }
-      });
-      await sound.playAsync();
-    } catch {
-      Alert.alert("Error", "Could not play voice note.");
-      soundRef.current = null;
-      setPlayingId(null);
-    }
-  }, [playingId]);
+    // Open in the full audio player modal instead
+    setAudioPlayer({ uri: buildUrl(url), name: "Voice Note" });
+  }, []);
 
-  // ── Context Menu Actions ──────────────────────────────
+  // ── Context menu ───────────────────────────────────────────
   const handleCopy = useCallback(() => {
     const msg = contextMsgRef.current;
     if (msg?.text) Clipboard.setString(msg.text);
@@ -445,7 +1074,7 @@ export default function MessageScreen() {
     if (!msg) return;
     const raw = await AsyncStorage.getItem(`pinnedMsgs_${childId}`);
     const ids: string[] = raw ? JSON.parse(raw) : [];
-    const updated = ids.includes(msg.id) ? ids.filter(i => i !== msg.id) : [...ids, msg.id];
+    const updated = ids.includes(msg.id) ? ids.filter((i) => i !== msg.id) : [...ids, msg.id];
     await AsyncStorage.setItem(`pinnedMsgs_${childId}`, JSON.stringify(updated));
     setPinnedIds(updated);
     setContextMsg(null);
@@ -457,45 +1086,44 @@ export default function MessageScreen() {
     setContextMsg(null);
     Alert.alert("Delete Message", "Are you sure?", [
       { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: async () => {
-        try {
-          const res = await fetch(`${BASE_URL}/api/parent-notes/messages/${msg.id}`, {
-            method: "DELETE",
-            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-          });
-          if (res.ok) {
-            setMessages(prev => prev.filter(m => m.id !== msg.id));
-            setPinnedIds(prev => {
-              const updated = prev.filter(id => id !== msg.id);
-              AsyncStorage.setItem(`pinnedMsgs_${childId}`, JSON.stringify(updated));
-              return updated;
+      {
+        text: "Delete", style: "destructive",
+        onPress: async () => {
+          try {
+            const res = await fetch(`${BASE_URL}/api/parent-notes/messages/${msg.id}`, {
+              method: "DELETE",
+              headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
             });
-          } else Alert.alert("Error", "Could not delete message.");
-        } catch { Alert.alert("Error", "Could not delete message."); }
-      }},
+            if (res.ok) {
+              setMessages((prev) => prev.filter((m) => m.id !== msg.id));
+              setPinnedIds((prev) => {
+                const updated = prev.filter((id) => id !== msg.id);
+                AsyncStorage.setItem(`pinnedMsgs_${childId}`, JSON.stringify(updated));
+                return updated;
+              });
+            } else Alert.alert("Error", "Could not delete message.");
+          } catch { Alert.alert("Error", "Could not delete message."); }
+        },
+      },
     ]);
   }, [token, childId]);
 
-  const cancelEdit  = useCallback(() => { setEditingMsg(null); setInputText(""); setSending(false); }, []);
+  const cancelEdit = useCallback(() => { setEditingMsg(null); setInputText(""); setSending(false); }, []);
   const cancelReply = useCallback(() => setReplyTo(null), []);
 
   const scrollToMessage = useCallback((msgId: string) => {
-    setMessages(current => {
-      const idx = current.findIndex(m => m.id === msgId);
+    setMessages((current) => {
+      const idx = current.findIndex((m) => m.id === msgId);
       if (idx !== -1) flatListRef.current?.scrollToIndex({ index: idx, animated: true, viewPosition: 0.3 });
       return current;
     });
   }, []);
 
-  //--------------- download the file and share ---------------
-  
-
-  // ── Send Message ──────────────────────────────────────
+  // ── Send message ───────────────────────────────────────────
   const sendMessage = async () => {
     if (!inputText.trim() && attachments.length === 0) return;
     setSending(true);
-
-    const latestText     = inputTextRef.current.trim();
+    const latestText = inputText.trim();
     const currentEditing = editingMsg;
 
     if (currentEditing) {
@@ -505,46 +1133,46 @@ export default function MessageScreen() {
         const res = await fetch(`${BASE_URL}/api/parent-notes/messages/${currentEditing.id}`, {
           method: "PATCH",
           headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ message: latestText }),
+          body: JSON.stringify({ message: encodeURIComponent(latestText) }),
         });
-        if (res.ok) setMessages(prev => prev.map(m => m.id === currentEditing.id ? { ...m, text: latestText } : m));
+        if (res.ok) setMessages((prev) =>
+          prev.map((m) => m.id === currentEditing.id ? { ...m, text: latestText } : m)
+        );
         else Alert.alert("Error", "Could not edit message.");
       } catch { Alert.alert("Error", "Could not edit message."); }
       finally { setSending(false); }
       return;
     }
 
-    const sentText    = inputText.trim();
-    const sentFiles   = [...attachments];
+    const sentText = inputText.trim();
+    const sentFiles = [...attachments];
     const sentReplyTo = replyTo;
-
     setInputText("");
     setAttachments([]);
     setReplyTo(null);
+    setShowEmojiPicker(false);
 
     const tempMsg: Message = {
-      id:             String(Date.now()),
-      text:           sentText,
-      sender:         "parent",
-      createdAt:      new Date().toISOString(),
-      attachmentUrl:  sentFiles[0]?.uri ?? undefined,
+      id: String(Date.now()), text: sentText, sender: "parent",
+      createdAt: new Date().toISOString(),
+      attachmentUrl: sentFiles[0]?.uri ?? undefined,
       attachmentType: sentFiles[0]?.type ?? undefined,
       attachmentName: sentFiles[0]?.name ?? undefined,
-      replyToId:      sentReplyTo?.id,
-      replyToText:    sentReplyTo?.text || (sentReplyTo?.attachmentName ? sentReplyTo.attachmentName : undefined),
-      status:         "sending",
+      replyToId: sentReplyTo?.id,
+      replyToText: sentReplyTo?.text || (sentReplyTo?.attachmentName ? sentReplyTo.attachmentName : undefined),
+      status: "sending",
     };
-    setMessages(prev => [...prev, tempMsg]);
+    setMessages((prev) => [...prev, tempMsg]);
 
     try {
-      let lastThreadId = threadId;
+      let finalThreadId = threadId;
 
       if (sentFiles.length > 0) {
         for (let i = 0; i < sentFiles.length; i++) {
           const f = sentFiles[i];
           const formData = new FormData();
           formData.append("student_id", String(Number(childId)));
-          if (i === 0 && sentText)    formData.append("message",     sentText);
+          if (i === 0 && sentText) formData.append("message", encodeURIComponent(sentText));
           if (i === 0 && sentReplyTo) formData.append("reply_to_id", sentReplyTo.id);
           formData.append("attachment", { uri: f.uri, type: f.mimeType, name: f.name } as any);
           const res = await fetch(`${BASE_URL}/api/parent-notes/threads`, {
@@ -553,7 +1181,7 @@ export default function MessageScreen() {
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const data = JSON.parse(await res.text());
           if (data.thread_id) {
-            lastThreadId = data.thread_id;
+            finalThreadId = data.thread_id;
             setThreadId(data.thread_id);
             const savedRaw = await AsyncStorage.getItem(`allThreadIds_${childId}`);
             const savedIds: number[] = savedRaw ? JSON.parse(savedRaw) : [];
@@ -567,12 +1195,19 @@ export default function MessageScreen() {
         const res = await fetch(`${BASE_URL}/api/parent-notes/threads`, {
           method: "POST",
           headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ student_id: Number(childId), message: sentText, ...(sentReplyTo ? { reply_to_id: sentReplyTo.id } : {}) }),
+          body: JSON.stringify({
+            student_id: Number(childId),
+            message: encodeURIComponent(sentText),
+            ...(sentReplyTo ? { reply_to_id: sentReplyTo.id } : {}),
+          }),
         });
-        if (!res.ok) { setMessages(prev => prev.filter(m => m.id !== tempMsg.id)); throw new Error(`HTTP ${res.status}`); }
+        if (!res.ok) {
+          setMessages((prev) => prev.filter((m) => m.id !== tempMsg.id));
+          throw new Error(`HTTP ${res.status}`);
+        }
         const data = JSON.parse(await res.text());
         if (data.thread_id) {
-          lastThreadId = data.thread_id;
+          finalThreadId = data.thread_id;
           setThreadId(data.thread_id);
           const savedRaw = await AsyncStorage.getItem(`allThreadIds_${childId}`);
           const savedIds: number[] = savedRaw ? JSON.parse(savedRaw) : [];
@@ -583,33 +1218,35 @@ export default function MessageScreen() {
         }
       }
 
-      // Update temp message status to sent
-      setMessages(prev => prev.map(m => m.id === tempMsg.id ? { ...m, status: "sent" } : m));
-      await fetchMessages(token, lastThreadId ?? undefined);
+      setMessages((prev) =>
+        prev.map((m) => (m.id === tempMsg.id ? { ...m, status: "sent" } : m))
+      );
+      await fetchMessages(token, finalThreadId ?? undefined);
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
-    } catch (err) {
-      setMessages(prev => prev.filter(m => m.id !== tempMsg.id));
+    } catch {
+      setMessages((prev) => prev.filter((m) => m.id !== tempMsg.id));
       Alert.alert("Error", "Could not send message. Please try again.");
     } finally {
       setSending(false);
     }
   };
 
+  // ── Utilities ──────────────────────────────────────────────
   const getInitials = (name: string) => {
     const parts = (name ?? "").trim().split(" ");
-    return parts.length >= 2 ? `${parts[0][0]}${parts[1][0]}`.toUpperCase() : (name ?? "U").substring(0, 2).toUpperCase();
+    return parts.length >= 2
+      ? `${parts[0][0]}${parts[1][0]}`.toUpperCase()
+      : (name ?? "U").substring(0, 2).toUpperCase();
   };
 
-  // ── Search filtered messages ──────────────────────────
   const filteredMessages = searchQuery.trim()
-    ? messages.filter(m => m.text?.toLowerCase().includes(searchQuery.toLowerCase()))
+    ? messages.filter((m) => m.text?.toLowerCase().includes(searchQuery.toLowerCase()))
     : messages;
 
-  // ── Group messages by date ────────────────────────────
   const groupedMessages = () => {
     const result: (Message | { type: "date"; label: string; id: string })[] = [];
     let lastDate = "";
-    filteredMessages.forEach(m => {
+    filteredMessages.forEach((m) => {
       const dateLabel = formatDate(m.createdAt);
       if (dateLabel !== lastDate) {
         result.push({ type: "date", label: dateLabel, id: `date_${dateLabel}` });
@@ -620,16 +1257,22 @@ export default function MessageScreen() {
     return result;
   };
 
-  // ── Media Gallery ─────────────────────────────────────
-  const mediaMessages = messages.filter(m => m.attachmentUrl && (m.attachmentType === "image" || m.attachmentType === "video"));
-  const fileMessages  = messages.filter(m => m.attachmentUrl && m.attachmentType === "file" &&
-    !m.attachmentName?.includes("voice_") && !m.attachmentName?.endsWith(".m4a"));
-  const voiceMessages = messages.filter(m => m.attachmentName?.endsWith(".m4a") || m.attachmentName?.includes("voice_") ||
-    m.attachmentUrl?.endsWith(".m4a") || m.attachmentUrl?.includes("voice_"));
+  const mediaMessages = messages.filter(
+    (m) => m.attachmentUrl && (m.attachmentType === "image" || m.attachmentType === "video")
+  );
+  const fileMessages = messages.filter(
+    (m) =>
+      m.attachmentUrl && m.attachmentType === "file" &&
+      !m.attachmentName?.includes("voice_") && !m.attachmentName?.endsWith(".m4a")
+  );
+  const voiceMessages = messages.filter(
+    (m) =>
+      m.attachmentName?.endsWith(".m4a") || m.attachmentName?.includes("voice_") ||
+      m.attachmentUrl?.endsWith(".m4a") || m.attachmentUrl?.includes("voice_")
+  );
+  const pinnedMessages = messages.filter((m) => pinnedIds.includes(m.id));
 
-  const pinnedMessages = messages.filter(m => pinnedIds.includes(m.id));
-
-  // ── Render Message ────────────────────────────────────
+  // ── Render: single message ─────────────────────────────────
   const renderMessage = ({ item }: { item: any }) => {
     if (item.type === "date") {
       return (
@@ -642,57 +1285,34 @@ export default function MessageScreen() {
     }
 
     const msg: Message = item;
-    const isParent  = msg.sender === "parent";
-    const isPinned  = pinnedIds.includes(msg.id);
-    const isVoice   = msg.attachmentName?.endsWith(".m4a")  || msg.attachmentName?.includes("voice_") ||
-                      msg.attachmentUrl?.endsWith(".m4a")   || msg.attachmentUrl?.includes("voice_");
-    const isVideo   = msg.attachmentType === "video" || msg.attachmentName?.endsWith(".mp4") ||
-                      msg.attachmentName?.includes("video_") || msg.attachmentUrl?.endsWith(".mp4");
+    const isParent = msg.sender === "parent";
+    const isPinned = pinnedIds.includes(msg.id);
+    const isVoice =
+      msg.attachmentName?.endsWith(".m4a") || msg.attachmentName?.includes("voice_") ||
+      msg.attachmentUrl?.endsWith(".m4a") || msg.attachmentUrl?.includes("voice_");
+    const isVideo =
+      msg.attachmentType === "video" || msg.attachmentName?.endsWith(".mp4") ||
+      msg.attachmentName?.includes("video_") || msg.attachmentUrl?.endsWith(".mp4");
     const isPlaying = playingId === msg.id;
-    const msgReactions = reactions[msg.id] ?? [];
+    const dlTint = isParent ? "rgba(255,255,255,0.85)" : PRIMARY;
 
     return (
-      <Pressable
-        onLongPress={() => { setContextMsg(msg); setShowEmojiFor(msg.id); }}
-        delayLongPress={350}
-      >
+      <Pressable onLongPress={() => setContextMsg(msg)} delayLongPress={350}>
         <View style={[s.msgRow, isParent && s.msgRowRight]}>
-          {/* Teacher avatar */}
           {!isParent && (
             <View style={s.teacherAvatar}>
               <Ionicons name="person" size={14} color={PRIMARY} />
             </View>
           )}
-
           <View style={{ maxWidth: "78%" }}>
-            {/* Emoji picker for this message */}
-            {showEmojiFor === msg.id && (
-              <View style={[s.emojiPicker, isParent ? s.emojiPickerRight : s.emojiPickerLeft]}>
-                {EMOJIS.map(e => (
-                  <TouchableOpacity key={e} onPress={() => handleReact(msg.id, e)} style={s.emojiBtn}>
-                    <Text style={[s.emojiText, msgReactions.includes(e) && s.emojiActive]}>{e}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-
-            {/* Pin indicator */}
             {isPinned && (
               <View style={[s.pinRow, isParent && { alignSelf: "flex-end" }]}>
                 <Ionicons name="pin" size={10} color="#F59E0B" />
                 <Text style={s.pinText}>Pinned</Text>
               </View>
             )}
-
-            {/* Teacher label */}
             {!isParent && <Text style={s.teacherLabel}>Teacher</Text>}
-
-            <View style={[
-              s.bubble,
-              isParent ? s.bubbleRight : s.bubbleLeft,
-              isPinned && s.bubblePinned,
-            ]}>
-              {/* Reply reference */}
+            <View style={[s.bubble, isParent ? s.bubbleRight : s.bubbleLeft, isPinned && s.bubblePinned]}>
               {msg.replyToId && msg.replyToText && (
                 <TouchableOpacity
                   onPress={() => scrollToMessage(msg.replyToId!)}
@@ -708,63 +1328,93 @@ export default function MessageScreen() {
                 </TouchableOpacity>
               )}
 
-              {/* Text */}
               {!!msg.text && (
                 <Text selectable style={[s.msgText, isParent && { color: "#fff" }]}>{msg.text}</Text>
               )}
 
               {/* Image */}
               {msg.attachmentType === "image" && msg.attachmentUrl && (
-                <TouchableOpacity onPress={() => setPreviewItem({ uri: buildUrl(msg.attachmentUrl!), type: "image" })}>
+                <TouchableOpacity onPress={() => openInApp(msg.attachmentUrl!, "image.jpg")}>
                   <Image source={{ uri: buildUrl(msg.attachmentUrl) }} style={s.attachedImage} resizeMode="cover" />
                 </TouchableOpacity>
               )}
 
-              {/* Video */}
+              {/* Video chip */}
               {isVideo && msg.attachmentUrl && (
-                <TouchableOpacity style={[s.mediaChip, isParent && s.mediaChipRight]} onPress={() => setPreviewVideo(buildUrl(msg.attachmentUrl!))}>
-                  <View style={s.videoThumb}>
-                    <Ionicons name="play-circle" size={32} color="#fff" />
-                  </View>
-                  <Text style={[s.mediaChipText, isParent && { color: "#fff" }]}>Video — tap to play</Text>
-                </TouchableOpacity>
+                <View style={[s.mediaChip, isParent && s.mediaChipRight]}>
+                  <TouchableOpacity
+                    style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}
+                    onPress={() => openInApp(msg.attachmentUrl!, msg.attachmentName ?? "video.mp4")}
+                  >
+                    <View style={s.videoThumb}>
+                      <Ionicons name="play-circle" size={32} color="#fff" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[s.mediaChipText, isParent && { color: "#fff" }]}>Video</Text>
+                      <Text style={[s.mediaChipSub, isParent && { color: "rgba(255,255,255,0.6)" }]}>Tap to play</Text>
+                    </View>
+                  </TouchableOpacity>
+                  <DownloadIcon
+                    url={msg.attachmentUrl}
+                    name={msg.attachmentName ?? `video_${msg.id}.mp4`}
+                    type="video"
+                    tintColor={dlTint}
+                  />
+                </View>
               )}
 
-              {/* Voice note */}
+              {/* Voice chip */}
               {isVoice && !isVideo && msg.attachmentUrl && (
-                <TouchableOpacity style={[s.voiceChip, isParent && s.voiceChipRight]} onPress={() => handlePlayVoice(msg.attachmentUrl!, msg.id)}>
-                  <Ionicons name={isPlaying ? "stop-circle" : "play-circle"} size={30} color={isParent ? "#fff" : PRIMARY} />
+                <TouchableOpacity
+                  style={[s.voiceChip, isParent && s.voiceChipRight]}
+                  onPress={() => openInApp(msg.attachmentUrl!, msg.attachmentName ?? "voice.m4a")}
+                >
+                  <Ionicons name="play-circle" size={30} color={isParent ? "#fff" : PRIMARY} />
                   <View style={s.waveform}>
                     {[4, 8, 12, 6, 10, 14, 8, 5, 11, 7].map((h, i) => (
-                      <View key={i} style={[s.waveBar, { height: h, backgroundColor: isParent ? "rgba(255,255,255,0.7)" : `${PRIMARY}80`, ...(isPlaying && { backgroundColor: isParent ? "#fff" : PRIMARY }) }]} />
+                      <View
+                        key={i}
+                        style={[s.waveBar, {
+                          height: h,
+                          backgroundColor: isParent ? "rgba(255,255,255,0.7)" : `${PRIMARY}80`,
+                        }]}
+                      />
                     ))}
                   </View>
                   <Text style={[s.voiceLabel, isParent && { color: "rgba(255,255,255,0.8)" }]}>
-                    {isPlaying ? "Playing..." : "Voice note"}
+                    Voice note
                   </Text>
                 </TouchableOpacity>
               )}
 
-              {/* Generic file */}
+              {/* File chip */}
               {msg.attachmentType === "file" && !isVoice && !isVideo && msg.attachmentUrl && (
-                <TouchableOpacity
-                  style={[s.fileChip, isParent && s.fileChipRight]}
-                  onPress={() => setPreviewItem({ uri: buildUrl(msg.attachmentUrl!), type: "file", name: msg.attachmentName })}
-                >
-                  <View style={[s.fileIconBox, { backgroundColor: isParent ? "rgba(255,255,255,0.2)" : "#EEF3FF" }]}>
-                    <Ionicons name="document-outline" size={20} color={isParent ? "#fff" : PRIMARY} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[s.fileName, isParent && { color: "#fff" }]} numberOfLines={1}>
-                      {msg.attachmentName ?? "File"}
-                    </Text>
-                    <Text style={[s.fileSub, isParent && { color: "rgba(255,255,255,0.6)" }]}>Tap to open</Text>
-                  </View>
-                  <Ionicons name="arrow-down-circle-outline" size={18} color={isParent ? "rgba(255,255,255,0.7)" : PRIMARY} />
-                </TouchableOpacity>
+                <View style={[s.fileChip, isParent && s.fileChipRight]}>
+                  <TouchableOpacity
+                    style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}
+                    onPress={() => openInApp(buildUrl(msg.attachmentUrl!), msg.attachmentName ?? "file")}
+                  >
+                    <View style={[s.fileIconBox, { backgroundColor: isParent ? "rgba(255,255,255,0.2)" : "#EEF3FF" }]}>
+                      <Ionicons name="document-outline" size={20} color={isParent ? "#fff" : PRIMARY} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[s.fileName, isParent && { color: "#fff" }]} numberOfLines={1}>
+                        {msg.attachmentName ?? "File"}
+                      </Text>
+                      <Text style={[s.fileSub, isParent && { color: "rgba(255,255,255,0.6)" }]}>
+                        {downloads[msg.attachmentUrl] === "done" ? "✓ Saved offline" : "Tap to open"}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                  <DownloadIcon
+                    url={msg.attachmentUrl}
+                    name={msg.attachmentName ?? `file_${msg.id}`}
+                    type="file"
+                    tintColor={dlTint}
+                  />
+                </View>
               )}
 
-              {/* Time + Status */}
               <View style={[s.timeRow, isParent && { justifyContent: "flex-end" }]}>
                 <Text style={[s.timeText, isParent && { color: "rgba(255,255,255,0.6)" }]}>
                   {formatTime(msg.createdAt)}
@@ -772,120 +1422,346 @@ export default function MessageScreen() {
                 {isParent && <StatusTick status={msg.status} />}
               </View>
             </View>
-
-            {/* Reactions display */}
-            {msgReactions.length > 0 && (
-              <View style={[s.reactionsRow, isParent && { alignSelf: "flex-end" }]}>
-                {msgReactions.map((e, i) => (
-                  <TouchableOpacity key={i} onPress={() => handleReact(msg.id, e)} style={s.reactionBubble}>
-                    <Text style={s.reactionEmoji}>{e}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
           </View>
         </View>
       </Pressable>
     );
   };
 
-  // ── Media Gallery Tab ─────────────────────────────────
+  // ── Render: Media gallery tab ──────────────────────────────
   const renderMediaGallery = () => (
-    <ScrollView contentContainerStyle={s.galleryScroll} showsVerticalScrollIndicator={false}>
-      {/* Images & Videos */}
-      {mediaMessages.length > 0 && (
-        <View style={s.gallerySection}>
-          <Text style={s.gallerySectionTitle}>Photos & Videos</Text>
-          <View style={s.galleryGrid}>
-            {mediaMessages.map((m, i) => (
-              <TouchableOpacity
-                key={m.id}
-                style={s.galleryThumb}
-                onPress={() => {
-                  if (m.attachmentType === "video") setPreviewVideo(buildUrl(m.attachmentUrl!));
-                  else setPreviewItem({ uri: buildUrl(m.attachmentUrl!), type: "image" });
-                }}
-              >
-                <Image source={{ uri: buildUrl(m.attachmentUrl!) }} style={s.galleryImg} resizeMode="cover" />
-                {m.attachmentType === "video" && (
-                  <View style={s.galleryPlayOverlay}>
-                    <Ionicons name="play-circle" size={28} color="#fff" />
-                  </View>
-                )}
-                <Text style={s.galleryTime}>{formatTime(m.createdAt)}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
+    <View style={{ flex: 1, backgroundColor: "#F0F4FB" }}>
+      <View style={s.subTabBar}>
+        <TouchableOpacity
+          style={[s.subTab, mediaSubTab === "photos" && s.subTabActive]}
+          onPress={() => setMediaSubTab("photos")}
+        >
+          <Ionicons name="images-outline" size={14} color={mediaSubTab === "photos" ? "#fff" : "#6B7280"} />
+          <Text style={[s.subTabText, mediaSubTab === "photos" && s.subTabTextActive]}>
+            Photos & Videos{mediaMessages.length > 0 ? ` (${mediaMessages.length})` : ""}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[s.subTab, mediaSubTab === "docs" && s.subTabActive]}
+          onPress={() => setMediaSubTab("docs")}
+        >
+          <Ionicons name="document-outline" size={14} color={mediaSubTab === "docs" ? "#fff" : "#6B7280"} />
+          <Text style={[s.subTabText, mediaSubTab === "docs" && s.subTabTextActive]}>
+            Files & Voice{fileMessages.length + voiceMessages.length > 0
+              ? ` (${fileMessages.length + voiceMessages.length})` : ""}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {mediaSubTab === "photos" && (
+        <ScrollView contentContainerStyle={s.paneScroll} showsVerticalScrollIndicator={false}>
+          {mediaMessages.length === 0 ? (
+            <View style={s.empty}>
+              <View style={s.emptyIconWrap}>
+                <Ionicons name="images-outline" size={36} color={PRIMARY} />
+              </View>
+              <Text style={s.emptyTitle}>No photos or videos yet</Text>
+              <Text style={s.emptySub}>Media shared in this chat will appear here.</Text>
+            </View>
+          ) : (
+            <View style={s.grid}>
+              {mediaMessages.map((m) => (
+                <TouchableOpacity
+                  key={m.id}
+                  style={s.thumb}
+                  activeOpacity={0.85}
+                  onPress={() => openInApp(
+                    buildUrl(m.attachmentUrl!),
+                    m.attachmentName ?? (m.attachmentType === "video" ? "video.mp4" : "image.jpg")
+                  )}
+                >
+                  <Image source={{ uri: buildUrl(m.attachmentUrl!) }} style={s.thumbImg} resizeMode="cover" />
+                  {m.attachmentType === "video" && (
+                    <View style={s.playOverlay}>
+                      <Ionicons name="play-circle" size={30} color="#fff" />
+                    </View>
+                  )}
+                  {m.attachmentType === "video" && m.attachmentUrl && (
+                    <TouchableOpacity
+                      style={s.thumbDlBtn}
+                      onPress={() => downloadFile(m.attachmentUrl!, m.attachmentName ?? `video_${m.id}.mp4`, "video")}
+                    >
+                      {downloads[m.attachmentUrl] === "downloading" ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <Ionicons
+                          name={downloads[m.attachmentUrl] === "done" ? "checkmark-circle" : "arrow-down-circle"}
+                          size={18}
+                          color={downloads[m.attachmentUrl] === "done" ? "#22C55E" : "#fff"}
+                        />
+                      )}
+                    </TouchableOpacity>
+                  )}
+                  <Text style={s.thumbTime}>{formatTime(m.createdAt)}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+        </ScrollView>
       )}
 
-      {/* Files */}
-      {fileMessages.length > 0 && (
-        <View style={s.gallerySection}>
-          <Text style={s.gallerySectionTitle}>Files</Text>
-          {fileMessages.map((m) => (
-            <TouchableOpacity
-              key={m.id}
-              style={s.galleryFileRow}
-              onPress={() => setPreviewItem({ uri: buildUrl(m.attachmentUrl!), type: "file", name: m.attachmentName })}
-            >
-              <View style={s.galleryFileIcon}>
-                <Ionicons name="document-outline" size={22} color={PRIMARY} />
+      {mediaSubTab === "docs" && (
+        <ScrollView contentContainerStyle={s.paneScroll} showsVerticalScrollIndicator={false}>
+          {fileMessages.length === 0 && voiceMessages.length === 0 ? (
+            <View style={s.empty}>
+              <View style={s.emptyIconWrap}>
+                <Ionicons name="document-outline" size={36} color={PRIMARY} />
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={s.galleryFileName} numberOfLines={1}>{m.attachmentName ?? "File"}</Text>
-                <Text style={s.galleryFileMeta}>{m.sender === "teacher" ? "From Teacher" : "Sent by you"} · {formatTime(m.createdAt)}</Text>
-              </View>
-              <Ionicons name="arrow-down-circle-outline" size={20} color={PRIMARY} />
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
+              <Text style={s.emptyTitle}>No files or voice notes yet</Text>
+              <Text style={s.emptySub}>Documents and voice messages will appear here.</Text>
+            </View>
+          ) : (
+            <>
+              {fileMessages.length > 0 && (
+                <View style={s.section}>
+                  <TouchableOpacity
+                    style={s.sectionHeader}
+                    onPress={() => setFilesExpanded((v) => !v)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={s.sectionHeaderLeft}>
+                      <View style={[s.sectionDot, { backgroundColor: PRIMARY }]} />
+                      <Text style={s.sectionTitle}>Files</Text>
+                      <View style={s.sectionBadge}>
+                        <Text style={s.sectionBadgeText}>{fileMessages.length}</Text>
+                      </View>
+                    </View>
+                    <Ionicons name={filesExpanded ? "chevron-up" : "chevron-down"} size={16} color="#9CA3AF" />
+                  </TouchableOpacity>
+                  {filesExpanded && fileMessages.map((m) => (
+                    <TouchableOpacity
+                      key={m.id}
+                      style={s.fileRow}
+                      activeOpacity={0.75}
+                      onPress={() => openInApp(buildUrl(m.attachmentUrl!), m.attachmentName ?? "file")}
+                    >
+                      <View style={s.fileIconBox}>
+                        <Ionicons name="document-outline" size={20} color={PRIMARY} />
+                      </View>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={s.fileName} numberOfLines={1}>{m.attachmentName ?? "File"}</Text>
+                        <Text style={s.fileMeta}>
+                          {m.sender === "teacher" ? "From Teacher" : "Sent by you"} · {formatTime(m.createdAt)}
+                        </Text>
+                      </View>
+                      <DownloadIcon
+                        url={m.attachmentUrl!}
+                        name={m.attachmentName ?? `file_${m.id}`}
+                        type="file"
+                        tintColor={PRIMARY}
+                      />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
 
-      {/* Voice Notes */}
-      {voiceMessages.length > 0 && (
-        <View style={s.gallerySection}>
-          <Text style={s.gallerySectionTitle}>Voice Notes</Text>
-          {voiceMessages.map((m) => (
-            <TouchableOpacity
-              key={m.id}
-              style={s.galleryFileRow}
-              onPress={() => m.attachmentUrl && handlePlayVoice(m.attachmentUrl, m.id)}
-            >
-              <View style={[s.galleryFileIcon, { backgroundColor: "#F5F3FF" }]}>
-                <Ionicons name={playingId === m.id ? "stop-circle" : "mic"} size={22} color="#7C3AED" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={s.galleryFileName}>Voice note</Text>
-                <Text style={s.galleryFileMeta}>{m.sender === "teacher" ? "From Teacher" : "Sent by you"} · {formatTime(m.createdAt)}</Text>
-              </View>
-              {playingId === m.id && <ActivityIndicator size="small" color="#7C3AED" />}
-            </TouchableOpacity>
-          ))}
-        </View>
+              {voiceMessages.length > 0 && (
+                <View style={s.section}>
+                  <TouchableOpacity
+                    style={s.sectionHeader}
+                    onPress={() => setVoiceExpanded((v) => !v)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={s.sectionHeaderLeft}>
+                      <View style={[s.sectionDot, { backgroundColor: "#7C3AED" }]} />
+                      <Text style={s.sectionTitle}>Voice Notes</Text>
+                      <View style={[s.sectionBadge, { backgroundColor: "#EDE9FE" }]}>
+                        <Text style={[s.sectionBadgeText, { color: "#7C3AED" }]}>{voiceMessages.length}</Text>
+                      </View>
+                    </View>
+                    <Ionicons name={voiceExpanded ? "chevron-up" : "chevron-down"} size={16} color="#9CA3AF" />
+                  </TouchableOpacity>
+                  {voiceExpanded && voiceMessages.map((m) => (
+                    <TouchableOpacity
+                      key={m.id}
+                      style={s.fileRow}
+                      activeOpacity={0.75}
+                      onPress={() => openInApp(buildUrl(m.attachmentUrl!), m.attachmentName ?? "voice.m4a")}
+                    >
+                      <View style={[s.fileIconBox, { backgroundColor: "#F5F3FF" }]}>
+                        <Ionicons name="mic" size={20} color="#7C3AED" />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={s.fileName}>Voice note</Text>
+                        <Text style={s.fileMeta}>
+                          {m.sender === "teacher" ? "From Teacher" : "Sent by you"} · {formatTime(m.createdAt)}
+                        </Text>
+                      </View>
+                      <View style={s.playBtn}>
+                        <Ionicons name="play" size={14} color="#7C3AED" />
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </>
+          )}
+        </ScrollView>
       )}
-
-      {mediaMessages.length === 0 && fileMessages.length === 0 && voiceMessages.length === 0 && (
-        <View style={s.emptyGallery}>
-          <Ionicons name="images-outline" size={56} color="#D1D5DB" />
-          <Text style={s.emptyGalleryTitle}>No media yet</Text>
-          <Text style={s.emptyGalleryText}>Photos, videos and files shared in this chat will appear here.</Text>
-        </View>
-      )}
-    </ScrollView>
+    </View>
   );
 
-  // ── JSX ───────────────────────────────────────────────
+  // ── Render: Downloads tab ──────────────────────────────────
+  const renderDownloads = () => {
+    const formatSize = (bytes?: number) => {
+      if (!bytes) return "";
+      if (bytes < 1024) return `${bytes} B`;
+      if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+      return `${(bytes / 1048576).toFixed(1)} MB`;
+    };
+
+    const formatSavedDate = (iso: string) => {
+      const d = new Date(iso);
+      return (
+        d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) +
+        " · " +
+        d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })
+      );
+    };
+
+const openDownloadedFile = async (file: DownloadedFile) => {
+  try {
+    const info = await FileSystem.getInfoAsync(file.localUri);
+ 
+    if (!info.exists) {
+      Alert.alert(
+        "File not found",
+        "This file was cleared from device storage.",
+        [
+          { text: "Remove from list", onPress: () => removeSavedFile(file.key), style: "destructive" },
+          { text: "OK", style: "cancel" },
+        ]
+      );
+      return;
+    }
+ 
+    const n = file.name.toLowerCase();
+    const isVideo = n.endsWith(".mp4") || file.type === "video";
+    const isVoice = n.endsWith(".m4a") || n.includes("voice_");
+    const isImage = ["jpg", "jpeg", "png", "gif", "webp"].includes(n.split(".").pop() ?? "");
+ 
+    if (isVideo) {
+      setPreviewVideo(file.localUri);
+    } else if (isVoice) {
+      setAudioPlayer({ uri: file.localUri, name: file.name });
+    } else if (isImage) {
+      setPreviewItem({ uri: file.localUri, type: "image", name: file.name });
+    } else {
+      // ✅ expo-sharing is the ONLY reliable way to open local files on Android
+      // It converts the file:// URI to a content:// URI internally
+      const canShare = await Sharing.isAvailableAsync();
+      if (canShare) {
+        await Sharing.shareAsync(file.localUri, {
+          mimeType: getMimeType(file.name),
+          dialogTitle: `Open ${file.name}`,
+          UTI: n.endsWith(".pdf") ? "com.adobe.pdf" : "public.data",
+        });
+      } else {
+        Alert.alert(
+          "Cannot open",
+          "No app found to open this file.\nPlease install a PDF reader or file manager app."
+        );
+      }
+    }
+  } catch (err: any) {
+    console.error("[openDownloadedFile] error:", err);
+    Alert.alert("Error", `Could not open file: ${err?.message ?? "unknown error"}`);
+  }
+};
+
+    const deleteFile = (file: DownloadedFile) => {
+      Alert.alert("Remove Download", `Remove "${file.name}" from Downloads?`, [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove", style: "destructive",
+          onPress: async () => {
+            try {
+              const info = await FileSystem.getInfoAsync(file.localUri);
+              if (info.exists) await FileSystem.deleteAsync(file.localUri, { idempotent: true });
+            } catch {}
+            await removeSavedFile(file.key);
+          },
+        },
+      ]);
+    };
+
+    if (savedFiles.length === 0) {
+      return (
+        <View style={[s.emptyGallery, { marginTop: 60 }]}>
+          <View style={s.dlEmptyIconWrap}>
+            <Ionicons name="cloud-download-outline" size={40} color={PRIMARY} />
+          </View>
+          <Text style={s.emptyGalleryTitle}>No downloads yet</Text>
+          <Text style={s.emptyGalleryText}>
+            Files and videos you download from chat will appear here for offline access.
+          </Text>
+        </View>
+      );
+    }
+
+    return (
+      <ScrollView contentContainerStyle={[s.galleryScroll, { paddingBottom: 40 }]} showsVerticalScrollIndicator={false}>
+        <View style={s.dlHeader}>
+          <View style={s.dlHeaderLeft}>
+            <Ionicons name="cloud-download" size={18} color={PRIMARY} />
+            <Text style={s.dlHeaderTitle}>
+              {savedFiles.length} downloaded item{savedFiles.length !== 1 ? "s" : ""}
+            </Text>
+          </View>
+          <Text style={s.dlHeaderSub}>Tap to open</Text>
+        </View>
+
+        {savedFiles.map((file) => (
+          <View key={file.key} style={s.dlRow}>
+            <View style={[s.dlIconBox, { backgroundColor: file.type === "video" ? "#1F2937" : "#EEF3FF" }]}>
+              <Ionicons
+                name={file.type === "video" ? "videocam" : "document-outline"}
+                size={22}
+                color={file.type === "video" ? "#fff" : PRIMARY}
+              />
+            </View>
+            <TouchableOpacity style={{ flex: 1 }} onPress={() => openDownloadedFile(file)}>
+              <Text style={s.dlName} numberOfLines={1}>{file.name}</Text>
+              <Text style={s.dlMeta}>
+                {file.type === "video" ? "Video" : "Document"}
+                {file.size ? `  ·  ${formatSize(file.size)}` : ""}
+                {"  ·  "}{formatSavedDate(file.savedAt)}
+              </Text>
+              <View style={s.dlOfflineBadge}>
+                <Ionicons name="checkmark-circle" size={11} color="#16A34A" />
+                <Text style={s.dlOfflineText}>Available offline</Text>
+              </View>
+            </TouchableOpacity>
+            <View style={s.dlActions}>
+              <TouchableOpacity
+                onPress={() => deleteFile(file)}
+                style={s.dlActionBtn}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="trash-outline" size={19} color="#EF4444" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        ))}
+      </ScrollView>
+    );
+  };
+
+  // ── JSX ────────────────────────────────────────────────────
   return (
     <SafeAreaView style={s.safe}>
       <StatusBar barStyle="light-content" backgroundColor={PRIMARY} />
 
-      {/* ── Header ─────────────────────────────────────── */}
+      {/* Header */}
       <View style={[s.header, { backgroundColor: PRIMARY }]}>
         <TouchableOpacity onPress={() => router.back()} style={s.headerBtn}>
           <Ionicons name="arrow-back-outline" size={20} color="#fff" />
         </TouchableOpacity>
-
         <View style={s.headerCenter}>
           <View style={s.headerAvatar}>
             <Text style={s.headerAvatarText}>{getInitials(childName ?? "")}</Text>
@@ -895,39 +1771,51 @@ export default function MessageScreen() {
             <Text style={s.headerSub}>{classname}{sectionname ? ` · ${sectionname}` : ""}</Text>
           </View>
         </View>
-
         <View style={s.headerActions}>
           <TouchableOpacity
             style={s.headerBtn}
-            onPress={() => { setShowSearch(v => !v); setSearchQuery(""); }}
+            onPress={() => { setShowSearch((v) => !v); setSearchQuery(""); }}
           >
             <Ionicons name={showSearch ? "close-outline" : "search-outline"} size={20} color="#fff" />
           </TouchableOpacity>
           <TouchableOpacity
             style={s.headerBtn}
-            onPress={() => setActiveTab(t => t === "chat" ? "media" : "chat")}
+            onPress={() => setActiveTab((t) => (t === "chat" ? "media" : "chat"))}
           >
-            <Ionicons name={activeTab === "chat" ? "images-outline" : "chatbubbles-outline"} size={20} color="#fff" />
+            <Ionicons
+              name={activeTab === "chat" ? "images-outline" : "chatbubbles-outline"}
+              size={20}
+              color="#fff"
+            />
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* ── Tab indicator ──────────────────────────────── */}
+      {/* Tab bar */}
       <View style={s.tabBar}>
-        <TouchableOpacity style={[s.tab, activeTab === "chat" && s.tabActive]} onPress={() => setActiveTab("chat")}>
-          <Ionicons name="chatbubbles-outline" size={15} color={activeTab === "chat" ? PRIMARY : "#9CA3AF"} />
-          <Text style={[s.tabText, activeTab === "chat" && s.tabTextActive]}>Chat</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[s.tab, activeTab === "media" && s.tabActive]} onPress={() => setActiveTab("media")}>
-          <Ionicons name="images-outline" size={15} color={activeTab === "media" ? PRIMARY : "#9CA3AF"} />
-          <Text style={[s.tabText, activeTab === "media" && s.tabTextActive]}>
-            Media {(mediaMessages.length + fileMessages.length + voiceMessages.length) > 0
-              ? `(${mediaMessages.length + fileMessages.length + voiceMessages.length})` : ""}
-          </Text>
-        </TouchableOpacity>
+        {(["chat", "media", "downloads"] as TabType[]).map((tab) => (
+          <TouchableOpacity
+            key={tab}
+            style={[s.tab, activeTab === tab && s.tabActive]}
+            onPress={() => setActiveTab(tab)}
+          >
+            <Ionicons
+              name={tab === "chat" ? "chatbubbles-outline" : tab === "media" ? "images-outline" : "cloud-download-outline"}
+              size={15}
+              color={activeTab === tab ? PRIMARY : "#9CA3AF"}
+            />
+            <Text style={[s.tabText, activeTab === tab && s.tabTextActive]}>
+              {tab === "chat" ? "Chat" :
+               tab === "media"
+                ? `Media${mediaMessages.length + fileMessages.length + voiceMessages.length > 0
+                    ? ` (${mediaMessages.length + fileMessages.length + voiceMessages.length})` : ""}`
+                : `Downloads${savedFiles.length > 0 ? ` (${savedFiles.length})` : ""}`}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
-      {/* ── Search Bar ─────────────────────────────────── */}
+      {/* Search bar */}
       {showSearch && activeTab === "chat" && (
         <View style={s.searchBar}>
           <Ionicons name="search-outline" size={16} color="#9CA3AF" />
@@ -952,12 +1840,12 @@ export default function MessageScreen() {
         </View>
       )}
 
-      {/* ── Pinned Banner ──────────────────────────────── */}
+      {/* Pinned banner */}
       {pinnedMessages.length > 0 && activeTab === "chat" && (
         <View style={s.pinnedBanner}>
           <Ionicons name="pin" size={12} color="#92400E" />
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1, marginLeft: 8 }}>
-            {pinnedMessages.map(m => (
+            {pinnedMessages.map((m) => (
               <TouchableOpacity key={m.id} style={s.pinnedChip} onPress={() => scrollToMessage(m.id)}>
                 <Text style={s.pinnedChipText} numberOfLines={1}>
                   {m.text || (m.attachmentName?.includes("voice_") ? "Voice note" : "Attachment")}
@@ -968,12 +1856,17 @@ export default function MessageScreen() {
         </View>
       )}
 
-      {/* ── Media Gallery Tab ───────────────────────────── */}
-      {activeTab === "media" ? renderMediaGallery() : (
-
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={0}>
-
-          {/* ── Messages List ─────────────────────────── */}
+      {/* Tab content */}
+      {activeTab === "media" ? (
+        renderMediaGallery()
+      ) : activeTab === "downloads" ? (
+        renderDownloads()
+      ) : (
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          keyboardVerticalOffset={0}
+        >
           {loading ? (
             <View style={s.loadingWrap}>
               <ActivityIndicator size="large" color={PRIMARY} />
@@ -983,13 +1876,15 @@ export default function MessageScreen() {
             <FlatList
               ref={flatListRef}
               data={groupedMessages()}
-              keyExtractor={item => (item as any).id ?? (item as any).id}
+              keyExtractor={(item) => (item as any).id}
               renderItem={renderMessage}
               removeClippedSubviews
               contentContainerStyle={s.list}
               onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
-              onScrollToIndexFailed={info => setTimeout(() => flatListRef.current?.scrollToIndex({ index: info.index, animated: true }), 300)}
-              onTouchStart={() => { if (showEmojiFor) setShowEmojiFor(null); }}
+              onScrollToIndexFailed={(info) =>
+                setTimeout(() => flatListRef.current?.scrollToIndex({ index: info.index, animated: true }), 300)
+              }
+              onTouchStart={() => { if (showEmojiPicker) setShowEmojiPicker(false); }}
               ListEmptyComponent={
                 <View style={s.emptyWrap}>
                   <View style={s.emptyIconWrap}>
@@ -1002,12 +1897,13 @@ export default function MessageScreen() {
             />
           )}
 
-          {/* ── Reply Banner ──────────────────────────── */}
           {replyTo && (
             <View style={s.replyBanner}>
               <View style={s.replyBannerBar} />
               <View style={{ flex: 1 }}>
-                <Text style={s.replyBannerLabel}>Replying to {replyTo.sender === "teacher" ? "Teacher" : "yourself"}</Text>
+                <Text style={s.replyBannerLabel}>
+                  Replying to {replyTo.sender === "teacher" ? "Teacher" : "yourself"}
+                </Text>
                 <Text style={s.replyBannerText} numberOfLines={1}>
                   {replyTo.text || (replyTo.attachmentName ? replyTo.attachmentName : "Attachment")}
                 </Text>
@@ -1018,7 +1914,6 @@ export default function MessageScreen() {
             </View>
           )}
 
-          {/* ── Edit Banner ───────────────────────────── */}
           {editingMsg && (
             <View style={[s.replyBanner, s.editBanner]}>
               <View style={[s.replyBannerBar, { backgroundColor: "#F59E0B" }]} />
@@ -1032,7 +1927,6 @@ export default function MessageScreen() {
             </View>
           )}
 
-          {/* ── Attachment Preview Strip ──────────────── */}
           {attachments.length > 0 && (
             <View style={s.attachStrip}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, padding: 8 }}>
@@ -1060,12 +1954,30 @@ export default function MessageScreen() {
             </View>
           )}
 
-          {/* ── Input Bar ────────────────────────────── */}
+          {showEmojiPicker && (
+            <View style={s.emojiPanel}>
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <View style={s.emojiGrid}>
+                  {EMOJI_LIST.map((emoji, i) => (
+                    <TouchableOpacity key={i} style={s.emojiGridBtn} onPress={() => handleEmojiSelect(emoji)}>
+                      <Text style={s.emojiGridText}>{emoji}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </ScrollView>
+            </View>
+          )}
+
           <View style={s.inputBar}>
             <TouchableOpacity onPress={showAttachmentOptions} style={s.attachBtn}>
               <Ionicons name="add-circle-outline" size={26} color={PRIMARY} />
             </TouchableOpacity>
-
+            <TouchableOpacity
+              onPress={() => { setShowEmojiPicker((v) => !v); if (!showEmojiPicker) inputRef.current?.blur(); }}
+              style={s.attachBtn}
+            >
+              <Text style={s.emojiToggleIcon}>{showEmojiPicker ? "⌨️" : "😊"}</Text>
+            </TouchableOpacity>
             <TextInput
               ref={inputRef}
               style={s.input}
@@ -1075,21 +1987,21 @@ export default function MessageScreen() {
               placeholderTextColor="#9CA3AF"
               multiline
               maxLength={500}
+              onFocus={() => setShowEmojiPicker(false)}
             />
-
             {!inputText.trim() && attachments.length === 0 && !editingMsg && (
               <TouchableOpacity
                 style={[s.voiceBtn, isRecording && s.voiceBtnActive]}
                 onPress={isRecording ? stopRecording : startRecording}
                 activeOpacity={0.8}
               >
-                {isTranscribing
-                  ? <ActivityIndicator size="small" color="#fff" />
-                  : <Ionicons name={isRecording ? "stop" : "mic"} size={20} color="#fff" />
-                }
+                {isTranscribing ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Ionicons name={isRecording ? "stop" : "mic"} size={20} color="#fff" />
+                )}
               </TouchableOpacity>
             )}
-
             {(!!inputText.trim() || attachments.length > 0 || editingMsg) && (
               <TouchableOpacity
                 style={[s.sendBtn, { backgroundColor: editingMsg ? "#F59E0B" : PRIMARY }, sending && { opacity: 0.5 }]}
@@ -1097,15 +2009,15 @@ export default function MessageScreen() {
                 disabled={sending}
                 activeOpacity={0.8}
               >
-                {sending
-                  ? <ActivityIndicator size="small" color="#fff" />
-                  : <Ionicons name={editingMsg ? "checkmark" : "send"} size={18} color="#fff" />
-                }
+                {sending ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Ionicons name={editingMsg ? "checkmark" : "send"} size={18} color="#fff" />
+                )}
               </TouchableOpacity>
             )}
           </View>
 
-          {/* ── Recording Bar ─────────────────────────── */}
           {isRecording && (
             <View style={s.recordingBar}>
               <View style={s.recordingDot} />
@@ -1115,21 +2027,28 @@ export default function MessageScreen() {
               </TouchableOpacity>
             </View>
           )}
-
         </KeyboardAvoidingView>
       )}
 
-      {/* ── Camera Modal ─────────────────────────────── */}
-      <Modal visible={showCamera} animationType="slide"
+      {/* Camera modal */}
+      <Modal
+        visible={showCamera}
+        animationType="slide"
         onRequestClose={() => { if (isVideoRecording) stopVideoRecording(); setShowCamera(false); }}
       >
         <View style={{ flex: 1, backgroundColor: "#000" }}>
           <CameraView ref={cameraRef} style={StyleSheet.absoluteFillObject} facing={cameraFacing} mode="video" />
           <View style={s.cameraTopBar}>
-            <TouchableOpacity onPress={() => { if (isVideoRecording) stopVideoRecording(); setShowCamera(false); }} style={s.cameraBtn}>
+            <TouchableOpacity
+              onPress={() => { if (isVideoRecording) stopVideoRecording(); setShowCamera(false); }}
+              style={s.cameraBtn}
+            >
               <Ionicons name="close" size={24} color="#fff" />
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => setCameraFacing(f => f === "back" ? "front" : "back")} style={s.cameraBtn}>
+            <TouchableOpacity
+              onPress={() => setCameraFacing((f) => (f === "back" ? "front" : "back"))}
+              style={s.cameraBtn}
+            >
               <Ionicons name="camera-reverse-outline" size={24} color="#fff" />
             </TouchableOpacity>
           </View>
@@ -1137,7 +2056,10 @@ export default function MessageScreen() {
             {isVideoRecording && <Text style={s.recordingLabel}>Recording...</Text>}
             <TouchableOpacity
               onPress={isVideoRecording ? stopVideoRecording : startVideoRecording}
-              style={[s.cameraRecord, { backgroundColor: isVideoRecording ? "#EF4444" : "#fff", borderColor: isVideoRecording ? "#fff" : "#EF4444" }]}
+              style={[s.cameraRecord, {
+                backgroundColor: isVideoRecording ? "#EF4444" : "#fff",
+                borderColor: isVideoRecording ? "#fff" : "#EF4444",
+              }]}
             >
               <Ionicons name={isVideoRecording ? "stop" : "videocam"} size={30} color={isVideoRecording ? "#fff" : "#EF4444"} />
             </TouchableOpacity>
@@ -1146,29 +2068,32 @@ export default function MessageScreen() {
         </View>
       </Modal>
 
-      {/* ── Video Preview ────────────────────────────── */}
+      {/* Video player */}
       {previewVideo && <VideoPlayerModal uri={previewVideo} onClose={() => setPreviewVideo(null)} />}
 
-      {/* ── Context Menu ─────────────────────────────── */}
-      <Modal visible={!!contextMsg} transparent animationType="fade" onRequestClose={() => { setContextMsg(null); setShowEmojiFor(null); }}>
-        <Pressable style={s.modalOverlay} onPress={() => { setContextMsg(null); setShowEmojiFor(null); }}>
+      {/* In-app file viewer (PDF / docs) */}
+      {/* {fileViewer && <InAppFileViewer uri={fileViewer.uri} name={fileViewer.name} onClose={() => setFileViewer(null)} />} */}
+
+      {/* In-app audio player */}
+      {audioPlayer && <AudioPlayerModal uri={audioPlayer.uri} name={audioPlayer.name} onClose={() => setAudioPlayer(null)} />}
+
+      {/* Image preview */}
+      {previewItem?.type === "image" && (
+        <Modal visible animationType="slide" transparent onRequestClose={() => setPreviewItem(null)}>
+          <View style={s.previewModal}>
+            <TouchableOpacity style={s.previewClose} onPress={() => setPreviewItem(null)}>
+              <Ionicons name="close" size={28} color="#fff" />
+            </TouchableOpacity>
+            <Image source={{ uri: previewItem.uri }} style={s.fullImage} resizeMode="contain" />
+          </View>
+        </Modal>
+      )}
+
+      {/* Context menu */}
+      <Modal visible={!!contextMsg} transparent animationType="fade" onRequestClose={() => setContextMsg(null)}>
+        <Pressable style={s.modalOverlay} onPress={() => setContextMsg(null)}>
           <View style={s.contextMenu}>
-            {/* Emoji reaction strip at top */}
-            <View style={s.contextEmojiRow}>
-              {EMOJIS.map(e => {
-                const reacted = (reactions[contextMsg?.id ?? ""] ?? []).includes(e);
-                return (
-                  <TouchableOpacity key={e} onPress={() => contextMsg && handleReact(contextMsg.id, e)} style={[s.contextEmojiBtn, reacted && s.contextEmojiBtnActive]}>
-                    <Text style={s.contextEmojiText}>{e}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            <View style={s.contextDivider} />
-
             <Text style={s.contextPreview} numberOfLines={2}>{contextMsg?.text || "Attachment"}</Text>
-
             <TouchableOpacity style={s.contextItem} onPress={handleCopy}>
               <Ionicons name="copy-outline" size={18} color="#374151" />
               <Text style={s.contextItemText}>Copy</Text>
@@ -1184,11 +2109,19 @@ export default function MessageScreen() {
               </TouchableOpacity>
             )}
             <TouchableOpacity style={s.contextItem} onPress={handlePin}>
-              <Ionicons name={pinnedIds.includes(contextMsg?.id ?? "") ? "pin" : "pin-outline"} size={18} color="#374151" />
-              <Text style={s.contextItemText}>{pinnedIds.includes(contextMsg?.id ?? "") ? "Unpin" : "Pin"}</Text>
+              <Ionicons
+                name={pinnedIds.includes(contextMsg?.id ?? "") ? "pin" : "pin-outline"}
+                size={18} color="#374151"
+              />
+              <Text style={s.contextItemText}>
+                {pinnedIds.includes(contextMsg?.id ?? "") ? "Unpin" : "Pin"}
+              </Text>
             </TouchableOpacity>
             {contextMsg?.sender === "parent" && (
-              <TouchableOpacity style={[s.contextItem, { borderTopWidth: 1, borderTopColor: "#F3F4F6", marginTop: 4 }]} onPress={handleDelete}>
+              <TouchableOpacity
+                style={[s.contextItem, { borderTopWidth: 1, borderTopColor: "#F3F4F6", marginTop: 4 }]}
+                onPress={handleDelete}
+              >
                 <Ionicons name="trash-outline" size={18} color="#EF4444" />
                 <Text style={[s.contextItemText, { color: "#EF4444" }]}>Delete</Text>
               </TouchableOpacity>
@@ -1196,222 +2129,160 @@ export default function MessageScreen() {
           </View>
         </Pressable>
       </Modal>
-
-      {/* ── Attachment Preview Modal ──────────────────── */}
-      <Modal visible={!!previewItem} transparent animationType="slide" onRequestClose={() => setPreviewItem(null)}>
-        <View style={s.previewModal}>
-          <TouchableOpacity style={s.previewClose} onPress={() => setPreviewItem(null)}>
-            <Ionicons name="close" size={28} color="#fff" />
-          </TouchableOpacity>
-          {previewItem?.type === "image" ? (
-            <Image source={{ uri: previewItem.uri }} style={s.fullImage} resizeMode="contain" />
-          ) : (
-            <View style={s.filePreviewFull}>
-              <Ionicons name="document-outline" size={64} color="#fff" />
-              <Text style={s.filePreviewName}>{previewItem?.name ?? "File"}</Text>
-              <TouchableOpacity style={s.openBtn} onPress={() => {
-                if (previewItem?.uri) { const { Linking } = require("react-native"); Linking.openURL(previewItem.uri); }
-              }}>
-                <Text style={s.openBtnText}>Open File</Text>
-                <Ionicons name="open-outline" size={16} color="#fff" />
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
-      </Modal>
-
     </SafeAreaView>
   );
 }
 
-// ── Styles ────────────────────────────────────────────────
+// ── Styles ──────────────────────────────────────────────────
 const s = StyleSheet.create({
-  safe:               { flex: 1, backgroundColor: "#F0F4FB" },
-
-  // Header
-  header:             { flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingTop: 14, paddingBottom: 14, gap: 8 },
-  headerBtn:          { width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.15)", alignItems: "center", justifyContent: "center" },
-  headerCenter:       { flex: 1, flexDirection: "row", alignItems: "center", gap: 10 },
-  headerAvatar:       { width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.2)", alignItems: "center", justifyContent: "center", borderWidth: 1.5, borderColor: "rgba(255,255,255,0.3)" },
-  headerAvatarText:   { color: "#fff", fontSize: 15, fontWeight: "800" },
-  headerName:         { color: "#fff", fontSize: 15, fontWeight: "800" },
-  headerSub:          { color: "rgba(255,255,255,0.75)", fontSize: 11 },
-  headerActions:      { flexDirection: "row", gap: 6 },
-
-  // Tabs
-  tabBar:             { flexDirection: "row", backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: "#E5E7EB" },
-  tab:                { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 11, borderBottomWidth: 2.5, borderBottomColor: "transparent" },
-  tabActive:          { borderBottomColor: PRIMARY },
-  tabText:            { fontSize: 13, fontWeight: "600", color: "#9CA3AF" },
-  tabTextActive:      { color: PRIMARY, fontWeight: "700" },
-
-  // Search
-  searchBar:          { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#fff", paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#E5E7EB" },
-  searchInput:        { flex: 1, fontSize: 14, color: "#1F2937" },
-  searchCount:        { fontSize: 12, color: PRIMARY, fontWeight: "700" },
-
-  // Pinned
-  pinnedBanner:       { flexDirection: "row", alignItems: "center", backgroundColor: "#FFFBEB", paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: "#FDE68A" },
-  pinnedChip:         { backgroundColor: "#FDE68A", borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4, marginRight: 8 },
-  pinnedChipText:     { fontSize: 11, color: "#92400E", maxWidth: 150, fontWeight: "600" },
-
-  // Loading / Empty
-  loadingWrap:        { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
-  loadingText:        { color: PRIMARY, fontSize: 14, fontWeight: "600" },
-  emptyWrap:          { alignItems: "center", paddingTop: 80 },
-  emptyIconWrap:      { width: 80, height: 80, borderRadius: 40, backgroundColor: "#EEF3FF", alignItems: "center", justifyContent: "center", marginBottom: 16 },
-  emptyTitle:         { fontSize: 17, fontWeight: "700", color: "#1F2937", marginBottom: 6 },
-  emptySub:           { fontSize: 13, color: "#9CA3AF" },
-
-  // List
-  list:               { padding: 12, paddingBottom: 8 },
-
-  // Date separator
-  dateSeparator:      { flexDirection: "row", alignItems: "center", marginVertical: 12, gap: 8 },
-  dateLine:           { flex: 1, height: 1, backgroundColor: "#E5E7EB" },
-  dateLabel:          { fontSize: 11, color: "#9CA3AF", fontWeight: "600", paddingHorizontal: 4 },
-
-  // Message row
-  msgRow:             { flexDirection: "row", alignItems: "flex-end", marginBottom: 6, gap: 8 },
-  msgRowRight:        { flexDirection: "row-reverse" },
-  teacherAvatar:      { width: 28, height: 28, borderRadius: 14, backgroundColor: "#EEF3FF", alignItems: "center", justifyContent: "center", marginBottom: 4 },
-  teacherLabel:       { fontSize: 10, color: "#9CA3AF", marginBottom: 2, marginLeft: 2 },
-  pinRow:             { flexDirection: "row", alignItems: "center", gap: 3, marginBottom: 2 },
-  pinText:            { fontSize: 10, color: "#F59E0B", fontWeight: "600" },
-
-  // Bubble
-  bubble:             { borderRadius: 18, padding: 10, maxWidth: "100%" },
-  bubbleLeft:         { backgroundColor: "#fff", borderBottomLeftRadius: 4, borderWidth: 1, borderColor: "#F0F0F0", elevation: 1, shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 4 },
-  bubbleRight:        { backgroundColor: PRIMARY, borderBottomRightRadius: 4, elevation: 2, shadowColor: PRIMARY, shadowOpacity: 0.2, shadowRadius: 6 },
-  bubblePinned:       { borderWidth: 1.5, borderColor: "#F59E0B" },
-
-  // Reply ref inside bubble
-  replyRef:           { flexDirection: "row", borderRadius: 10, padding: 8, marginBottom: 6, gap: 8 },
-  replyRefRight:      { backgroundColor: "rgba(255,255,255,0.15)" },
-  replyRefLeft:       { backgroundColor: "#F3F4F6" },
-  replyRefBar:        { width: 3, borderRadius: 2, backgroundColor: "#60A5FA" },
-  replyRefLabel:      { fontSize: 10, color: "#9CA3AF", marginBottom: 1 },
-  replyRefText:       { fontSize: 12, color: "#374151", fontWeight: "600" },
-
-  // Message text
-  msgText:            { fontSize: 15, color: "#111827", lineHeight: 21 },
-
-  // Attached image
-  attachedImage:      { width: 200, height: 150, borderRadius: 12, marginTop: 6 },
-
-  // Media chip (video)
-  mediaChip:          { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 6, backgroundColor: "#F3F4F6", borderRadius: 12, padding: 10 },
-  mediaChipRight:     { backgroundColor: "rgba(255,255,255,0.15)" },
-  mediaChipText:      { fontSize: 13, color: "#374151", flex: 1 },
-  videoThumb:         { width: 44, height: 44, borderRadius: 10, backgroundColor: "#1F2937", alignItems: "center", justifyContent: "center" },
-
-  // Voice chip
-  voiceChip:          { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 6, backgroundColor: "#F3F4F6", borderRadius: 12, padding: 10 },
-  voiceChipRight:     { backgroundColor: "rgba(255,255,255,0.15)" },
-  waveform:           { flexDirection: "row", alignItems: "center", gap: 2, flex: 1 },
-  waveBar:            { width: 3, borderRadius: 2 },
-  voiceLabel:         { fontSize: 11, color: "#6B7280", fontWeight: "600" },
-
-  // File chip
-  fileChip:           { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 6, backgroundColor: "#F3F4F6", borderRadius: 12, padding: 10 },
-  fileChipRight:      { backgroundColor: "rgba(255,255,255,0.15)" },
-  fileIconBox:        { width: 38, height: 38, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  fileName:           { fontSize: 13, color: "#374151", fontWeight: "600" },
-  fileSub:            { fontSize: 10, color: "#9CA3AF", marginTop: 1 },
-
-  // Time row
-  timeRow:            { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 },
-  timeText:           { fontSize: 10, color: "#9CA3AF" },
-
-  // Reactions
-  reactionsRow:       { flexDirection: "row", gap: 4, marginTop: 4, flexWrap: "wrap" },
-  reactionBubble:     { backgroundColor: "#fff", borderRadius: 12, paddingHorizontal: 7, paddingVertical: 3, borderWidth: 1, borderColor: "#E5E7EB", elevation: 1 },
-  reactionEmoji:      { fontSize: 14 },
-
-  // Emoji picker (inline above bubble)
-  emojiPicker:        { flexDirection: "row", backgroundColor: "#1F2937", borderRadius: 24, padding: 6, marginBottom: 6, gap: 2, elevation: 8, shadowColor: "#000", shadowOpacity: 0.2, shadowRadius: 8 },
-  emojiPickerLeft:    { alignSelf: "flex-start" },
-  emojiPickerRight:   { alignSelf: "flex-end" },
-  emojiBtn:           { padding: 4 },
-  emojiText:          { fontSize: 20 },
-  emojiActive:        { transform: [{ scale: 1.3 }] },
-
-  // Reply / Edit banner
-  replyBanner:        { flexDirection: "row", alignItems: "center", backgroundColor: "#F9FAFB", paddingHorizontal: 12, paddingVertical: 10, borderTopWidth: 1, borderTopColor: "#E5E7EB", gap: 10 },
-  replyBannerBar:     { width: 3, height: 36, borderRadius: 2, backgroundColor: PRIMARY },
-  replyBannerLabel:   { fontSize: 11, color: "#6B7280", fontWeight: "600" },
-  replyBannerText:    { fontSize: 13, color: "#1F2937" },
-  replyClose:         { padding: 4 },
-  editBanner:         { backgroundColor: "#FFFBEB" },
-
-  // Attachment strip
-  attachStrip:        { backgroundColor: "#F9FAFB", borderTopWidth: 1, borderTopColor: "#E5E7EB" },
-  attachThumb:        { position: "relative" },
-  attachThumbImg:     { width: 64, height: 64, borderRadius: 10 },
-  attachThumbFile:    { width: 64, height: 64, borderRadius: 10, backgroundColor: "#EEF3FF", alignItems: "center", justifyContent: "center", gap: 4 },
-  attachThumbName:    { fontSize: 9, color: PRIMARY, fontWeight: "600", maxWidth: 60, textAlign: "center" },
-  attachRemove:       { position: "absolute", top: -6, right: -6 },
-
-  // Input bar
-  inputBar:           { flexDirection: "row", alignItems: "flex-end", padding: 8, gap: 8, backgroundColor: "#fff", borderTopWidth: 1, borderTopColor: "#E5E7EB" },
-  attachBtn:          { padding: 4 },
-  input:              { flex: 1, backgroundColor: "#F3F4F6", borderRadius: 22, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15, maxHeight: 100, color: "#1F2937" },
-  voiceBtn:           { width: 40, height: 40, borderRadius: 20, backgroundColor: "#6B7280", alignItems: "center", justifyContent: "center" },
-  voiceBtnActive:     { backgroundColor: "#EF4444" },
-  sendBtn:            { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
-
-  // Recording bar
-  recordingBar:       { flexDirection: "row", alignItems: "center", backgroundColor: "#FEE2E2", paddingHorizontal: 14, paddingVertical: 10, gap: 10 },
-  recordingDot:       { width: 10, height: 10, borderRadius: 5, backgroundColor: "#EF4444" },
-  recordingText:      { flex: 1, fontSize: 13, color: "#991B1B", fontWeight: "600" },
-  recordingStop:      { padding: 4 },
-
-  // Camera
-  cameraTopBar:       { position: "absolute", top: 0, left: 0, right: 0, flexDirection: "row", justifyContent: "space-between", padding: 16, paddingTop: 50 },
-  cameraBtn:          { backgroundColor: "rgba(0,0,0,0.5)", borderRadius: 20, padding: 8 },
-  cameraBottomBar:    { position: "absolute", bottom: 50, left: 0, right: 0, alignItems: "center", gap: 12 },
-  cameraRecord:       { width: 72, height: 72, borderRadius: 36, borderWidth: 4, alignItems: "center", justifyContent: "center" },
-  cameraHint:         { color: "rgba(255,255,255,0.7)", fontSize: 13 },
-  recordingLabel:     { color: "#fff", fontSize: 15, fontWeight: "700" },
-
-  // Context menu
-  modalOverlay:       { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "center", alignItems: "center" },
-  contextMenu:        { backgroundColor: "#fff", borderRadius: 20, width: 280, overflow: "hidden", elevation: 12, shadowColor: "#000", shadowOpacity: 0.2, shadowRadius: 12 },
-  contextEmojiRow:    { flexDirection: "row", justifyContent: "space-around", padding: 14, backgroundColor: "#F9FAFB" },
-  contextEmojiBtn:    { padding: 6, borderRadius: 20 },
-  contextEmojiBtnActive: { backgroundColor: "#EEF3FF" },
-  contextEmojiText:   { fontSize: 22 },
-  contextDivider:     { height: 1, backgroundColor: "#F3F4F6" },
-  contextPreview:     { fontSize: 12, color: "#9CA3AF", paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#F3F4F6" },
-  contextItem:        { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 13 },
-  contextItemText:    { fontSize: 15, color: "#111827", fontWeight: "500" },
-
-  // Attachment preview modal
-  previewModal:       { flex: 1, backgroundColor: "#000", justifyContent: "center", alignItems: "center" },
-  previewClose:       { position: "absolute", top: 50, right: 16, zIndex: 10, backgroundColor: "rgba(0,0,0,0.5)", borderRadius: 20, padding: 6 },
-  fullImage:          { width: "100%", height: "80%" },
-  filePreviewFull:    { alignItems: "center", gap: 16 },
-  filePreviewName:    { color: "#fff", fontSize: 16, fontWeight: "600", textAlign: "center", paddingHorizontal: 20 },
-  openBtn:            { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: PRIMARY, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 },
-  openBtnText:        { color: "#fff", fontSize: 15, fontWeight: "600" },
-
-  // Video close
-  videoClose:         { position: "absolute", top: 50, right: 16, zIndex: 10, backgroundColor: "rgba(0,0,0,0.6)", borderRadius: 20, padding: 8 },
-
-  // Media Gallery
-  galleryScroll:      { padding: 16, paddingBottom: 40 },
-  gallerySection:     { marginBottom: 24 },
-  gallerySectionTitle:{ fontSize: 12, fontWeight: "800", color: "#9CA3AF", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 },
-  galleryGrid:        { flexDirection: "row", flexWrap: "wrap", gap: 4 },
-  galleryThumb:       { width: (SCREEN_W - 48) / 3, height: (SCREEN_W - 48) / 3, borderRadius: 10, overflow: "hidden", position: "relative" },
-  galleryImg:         { width: "100%", height: "100%" },
-  galleryPlayOverlay: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.3)" },
-  galleryTime:        { position: "absolute", bottom: 4, right: 6, fontSize: 9, color: "#fff", fontWeight: "700" },
-  galleryFileRow:     { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "#fff", borderRadius: 14, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: "#E8EFFA", elevation: 2, shadowColor: PRIMARY, shadowOpacity: 0.05, shadowRadius: 6 },
-  galleryFileIcon:    { width: 44, height: 44, borderRadius: 12, backgroundColor: "#EEF3FF", alignItems: "center", justifyContent: "center" },
-  galleryFileName:    { fontSize: 14, fontWeight: "600", color: "#1F2937", marginBottom: 2 },
-  galleryFileMeta:    { fontSize: 11, color: "#9CA3AF" },
-  emptyGallery:       { alignItems: "center", paddingTop: 60, gap: 12 },
-  emptyGalleryTitle:  { fontSize: 16, fontWeight: "700", color: "#1F2937" },
-  emptyGalleryText:   { fontSize: 13, color: "#9CA3AF", textAlign: "center", lineHeight: 20, paddingHorizontal: 30 },
+  safe: { flex: 1, backgroundColor: "#F0F4FB" },
+  header: { flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingTop: 14, paddingBottom: 14, gap: 8 },
+  headerBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.15)", alignItems: "center", justifyContent: "center" },
+  headerCenter: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10 },
+  headerAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.2)", alignItems: "center", justifyContent: "center", borderWidth: 1.5, borderColor: "rgba(255,255,255,0.3)" },
+  headerAvatarText: { color: "#fff", fontSize: 15, fontWeight: "800" },
+  headerName: { color: "#fff", fontSize: 15, fontWeight: "800" },
+  headerSub: { color: "rgba(255,255,255,0.75)", fontSize: 11 },
+  headerActions: { flexDirection: "row", gap: 6 },
+  tabBar: { flexDirection: "row", backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: "#E5E7EB" },
+  tab: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, paddingVertical: 11, paddingHorizontal: 4, borderBottomWidth: 2.5, borderBottomColor: "transparent" },
+  tabActive: { borderBottomColor: PRIMARY },
+  tabText: { fontSize: 12, fontWeight: "600", color: "#9CA3AF" },
+  tabTextActive: { color: PRIMARY, fontWeight: "700" },
+  searchBar: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#fff", paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#E5E7EB" },
+  searchInput: { flex: 1, fontSize: 14, color: "#1F2937" },
+  searchCount: { fontSize: 12, color: PRIMARY, fontWeight: "700" },
+  pinnedBanner: { flexDirection: "row", alignItems: "center", backgroundColor: "#FFFBEB", paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: "#FDE68A" },
+  pinnedChip: { backgroundColor: "#FDE68A", borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4, marginRight: 8 },
+  pinnedChipText: { fontSize: 11, color: "#92400E", maxWidth: 150, fontWeight: "600" },
+  loadingWrap: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
+  loadingText: { color: PRIMARY, fontSize: 14, fontWeight: "600" },
+  emptyWrap: { alignItems: "center", paddingTop: 80 },
+  list: { padding: 12, paddingBottom: 8 },
+  mediaChipSub: { fontSize: 11, color: "#6B7280" },
+  downloadBtn: { padding: 6 },
+  dateSeparator: { flexDirection: "row", alignItems: "center", marginVertical: 12, gap: 8 },
+  dateLine: { flex: 1, height: 1, backgroundColor: "#E5E7EB" },
+  dateLabel: { fontSize: 11, color: "#9CA3AF", fontWeight: "600", paddingHorizontal: 4 },
+  msgRow: { flexDirection: "row", alignItems: "flex-end", marginBottom: 6, gap: 8 },
+  msgRowRight: { flexDirection: "row-reverse" },
+  teacherAvatar: { width: 28, height: 28, borderRadius: 14, backgroundColor: "#EEF3FF", alignItems: "center", justifyContent: "center", marginBottom: 4 },
+  teacherLabel: { fontSize: 10, color: "#9CA3AF", marginBottom: 2, marginLeft: 2 },
+  pinRow: { flexDirection: "row", alignItems: "center", gap: 3, marginBottom: 2 },
+  pinText: { fontSize: 10, color: "#F59E0B", fontWeight: "600" },
+  bubble: { borderRadius: 18, padding: 10, maxWidth: "100%" },
+  bubbleLeft: { backgroundColor: "#fff", borderBottomLeftRadius: 4, borderWidth: 1, borderColor: "#F0F0F0", elevation: 1, shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 4 },
+  bubbleRight: { backgroundColor: PRIMARY, borderBottomRightRadius: 4, elevation: 2, shadowColor: PRIMARY, shadowOpacity: 0.2, shadowRadius: 6 },
+  bubblePinned: { borderWidth: 1.5, borderColor: "#F59E0B" },
+  replyRef: { flexDirection: "row", borderRadius: 10, padding: 8, marginBottom: 6, gap: 8 },
+  replyRefRight: { backgroundColor: "rgba(255,255,255,0.15)" },
+  replyRefLeft: { backgroundColor: "#F3F4F6" },
+  replyRefBar: { width: 3, borderRadius: 2, backgroundColor: "#60A5FA" },
+  replyRefLabel: { fontSize: 10, color: "#9CA3AF", marginBottom: 1 },
+  replyRefText: { fontSize: 12, color: "#374151", fontWeight: "600" },
+  msgText: { fontSize: 15, color: "#111827", lineHeight: 21 },
+  attachedImage: { width: 200, height: 150, borderRadius: 12, marginTop: 6 },
+  mediaChip: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 6, backgroundColor: "#F3F4F6", borderRadius: 12, padding: 10 },
+  mediaChipRight: { backgroundColor: "rgba(255,255,255,0.15)" },
+  mediaChipText: { fontSize: 13, color: "#374151", flex: 1 },
+  videoThumb: { width: 44, height: 44, borderRadius: 10, backgroundColor: "#1F2937", alignItems: "center", justifyContent: "center" },
+  voiceChip: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 6, backgroundColor: "#F3F4F6", borderRadius: 12, padding: 10 },
+  voiceChipRight: { backgroundColor: "rgba(255,255,255,0.15)" },
+  waveform: { flexDirection: "row", alignItems: "center", gap: 2, flex: 1 },
+  waveBar: { width: 3, borderRadius: 2 },
+  voiceLabel: { fontSize: 11, color: "#6B7280", fontWeight: "600" },
+  fileChip: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 6, backgroundColor: "#F3F4F6", borderRadius: 12, padding: 10 },
+  fileChipRight: { backgroundColor: "rgba(255,255,255,0.15)" },
+  fileIconBox: { width: 40, height: 40, borderRadius: 10, backgroundColor: "#EEF3FF", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  fileName: { fontSize: 13, color: "#374151", fontWeight: "600" },
+  fileSub: { fontSize: 10, color: "#9CA3AF", marginTop: 1 },
+  timeRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 },
+  timeText: { fontSize: 10, color: "#9CA3AF" },
+  replyBanner: { flexDirection: "row", alignItems: "center", backgroundColor: "#F9FAFB", paddingHorizontal: 12, paddingVertical: 10, borderTopWidth: 1, borderTopColor: "#E5E7EB", gap: 10 },
+  replyBannerBar: { width: 3, height: 36, borderRadius: 2, backgroundColor: PRIMARY },
+  replyBannerLabel: { fontSize: 11, color: "#6B7280", fontWeight: "600" },
+  replyBannerText: { fontSize: 13, color: "#1F2937" },
+  replyClose: { padding: 4 },
+  editBanner: { backgroundColor: "#FFFBEB" },
+  attachStrip: { backgroundColor: "#F9FAFB", borderTopWidth: 1, borderTopColor: "#E5E7EB" },
+  attachThumb: { position: "relative" },
+  attachThumbImg: { width: 64, height: 64, borderRadius: 10 },
+  attachThumbFile: { width: 64, height: 64, borderRadius: 10, backgroundColor: "#EEF3FF", alignItems: "center", justifyContent: "center", gap: 4 },
+  attachThumbName: { fontSize: 9, color: PRIMARY, fontWeight: "600", maxWidth: 60, textAlign: "center" },
+  attachRemove: { position: "absolute", top: -6, right: -6 },
+  emojiPanel: { backgroundColor: "#fff", borderTopWidth: 1, borderTopColor: "#E5E7EB", height: 220, paddingHorizontal: 8, paddingTop: 8 },
+  emojiGrid: { flexDirection: "row", flexWrap: "wrap" },
+  emojiGridBtn: { width: (SCREEN_W - 16) / 8, height: 44, alignItems: "center", justifyContent: "center" },
+  emojiGridText: { fontSize: 24 },
+  emojiToggleIcon: { fontSize: 24 },
+  inputBar: { flexDirection: "row", alignItems: "flex-end", padding: 8, gap: 8, backgroundColor: "#fff", borderTopWidth: 1, borderTopColor: "#E5E7EB" },
+  attachBtn: { padding: 4 },
+  input: { flex: 1, backgroundColor: "#F3F4F6", borderRadius: 22, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15, maxHeight: 100, color: "#1F2937" },
+  voiceBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: "#6B7280", alignItems: "center", justifyContent: "center" },
+  voiceBtnActive: { backgroundColor: "#EF4444" },
+  sendBtn: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
+  recordingBar: { flexDirection: "row", alignItems: "center", backgroundColor: "#FEE2E2", paddingHorizontal: 14, paddingVertical: 10, gap: 10 },
+  recordingDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: "#EF4444" },
+  recordingText: { flex: 1, fontSize: 13, color: "#991B1B", fontWeight: "600" },
+  recordingStop: { padding: 4 },
+  cameraTopBar: { position: "absolute", top: 0, left: 0, right: 0, flexDirection: "row", justifyContent: "space-between", padding: 16, paddingTop: 50 },
+  cameraBtn: { backgroundColor: "rgba(0,0,0,0.5)", borderRadius: 20, padding: 8 },
+  cameraBottomBar: { position: "absolute", bottom: 50, left: 0, right: 0, alignItems: "center", gap: 12 },
+  cameraRecord: { width: 72, height: 72, borderRadius: 36, borderWidth: 4, alignItems: "center", justifyContent: "center" },
+  cameraHint: { color: "rgba(255,255,255,0.7)", fontSize: 13 },
+  recordingLabel: { color: "#fff", fontSize: 15, fontWeight: "700" },
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "center", alignItems: "center" },
+  contextMenu: { backgroundColor: "#fff", borderRadius: 20, width: 280, overflow: "hidden", elevation: 12, shadowColor: "#000", shadowOpacity: 0.2, shadowRadius: 12 },
+  contextPreview: { fontSize: 12, color: "#9CA3AF", paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#F3F4F6" },
+  contextItem: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 13 },
+  contextItemText: { fontSize: 15, color: "#111827", fontWeight: "500" },
+  previewModal: { flex: 1, backgroundColor: "#000", justifyContent: "center", alignItems: "center" },
+  previewClose: { position: "absolute", top: 50, right: 16, zIndex: 10, backgroundColor: "rgba(0,0,0,0.5)", borderRadius: 20, padding: 6 },
+  fullImage: { width: "100%", height: "80%" },
+  videoClose: { position: "absolute", top: 50, right: 16, zIndex: 10, backgroundColor: "rgba(0,0,0,0.6)", borderRadius: 20, padding: 8 },
+  galleryScroll: { padding: 16, paddingBottom: 40 },
+  emptyGallery: { alignItems: "center", paddingTop: 60, gap: 12 },
+  emptyGalleryTitle: { fontSize: 16, fontWeight: "700", color: "#1F2937" },
+  emptyGalleryText: { fontSize: 13, color: "#9CA3AF", textAlign: "center", lineHeight: 20, paddingHorizontal: 30 },
+  dlHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14, paddingHorizontal: 2 },
+  dlHeaderLeft: { flexDirection: "row", alignItems: "center", gap: 6 },
+  dlHeaderTitle: { fontSize: 14, fontWeight: "700", color: PRIMARY },
+  dlHeaderSub: { fontSize: 11, color: "#9CA3AF" },
+  dlRow: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "#fff", borderRadius: 14, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: "#E8EFFA", elevation: 2, shadowColor: PRIMARY, shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 2 } },
+  dlIconBox: { width: 48, height: 48, borderRadius: 13, alignItems: "center", justifyContent: "center" },
+  dlName: { fontSize: 14, fontWeight: "600", color: "#1F2937", marginBottom: 3 },
+  dlMeta: { fontSize: 11, color: "#9CA3AF", marginBottom: 5 },
+  dlOfflineBadge: { flexDirection: "row", alignItems: "center", gap: 4 },
+  dlOfflineText: { fontSize: 10, color: "#16A34A", fontWeight: "600" },
+  dlActions: { flexDirection: "row", gap: 2 },
+  dlActionBtn: { padding: 8, borderRadius: 8 },
+  dlEmptyIconWrap: { width: 80, height: 80, borderRadius: 40, backgroundColor: "#EEF3FF", alignItems: "center", justifyContent: "center", marginBottom: 4 },
+  subTabBar: { flexDirection: "row", gap: 8, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: "#F0F4FB", borderBottomWidth: 1, borderBottomColor: "#E5E7EB" },
+  subTab: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: "#fff", borderWidth: 1, borderColor: "#E5E7EB" },
+  subTabActive: { backgroundColor: PRIMARY, borderColor: PRIMARY },
+  subTabText: { fontSize: 12, fontWeight: "600", color: "#6B7280" },
+  subTabTextActive: { color: "#fff" },
+  paneScroll: { padding: 14, paddingBottom: 40 },
+  grid: { flexDirection: "row", flexWrap: "wrap", gap: 4 },
+  thumb: { width: (SCREEN_W - 44) / 3, height: (SCREEN_W - 44) / 3, borderRadius: 10, overflow: "hidden", position: "relative" },
+  thumbImg: { width: "100%", height: "100%" },
+  playOverlay: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.28)" },
+  thumbDlBtn: { position: "absolute", top: 5, right: 5, backgroundColor: "rgba(0,0,0,0.48)", borderRadius: 12, padding: 3 },
+  thumbTime: { position: "absolute", bottom: 4, right: 6, fontSize: 9, color: "#fff", fontWeight: "700" },
+  section: { marginBottom: 10, backgroundColor: "#fff", borderRadius: 14, borderWidth: 1, borderColor: "#E8EFFA", overflow: "hidden" },
+  sectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 14, paddingVertical: 13 },
+  sectionHeaderLeft: { flexDirection: "row", alignItems: "center", gap: 8 },
+  sectionDot: { width: 8, height: 8, borderRadius: 4 },
+  sectionTitle: { fontSize: 13, fontWeight: "700", color: "#1F2937" },
+  sectionBadge: { backgroundColor: "#EEF3FF", borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2 },
+  sectionBadgeText: { fontSize: 11, fontWeight: "700", color: PRIMARY },
+  fileRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 14, paddingVertical: 11, borderTopWidth: 0.5, borderTopColor: "#F3F4F6" },
+  fileMeta: { fontSize: 11, color: "#9CA3AF" },
+  playBtn: { width: 30, height: 30, borderRadius: 15, backgroundColor: "#EDE9FE", alignItems: "center", justifyContent: "center" },
+  playingBadge: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "#EDE9FE", borderRadius: 12, paddingHorizontal: 8, paddingVertical: 4 },
+  playingText: { fontSize: 11, fontWeight: "600", color: "#7C3AED" },
+  empty: { alignItems: "center", paddingTop: 60, gap: 10 },
+  emptyIconWrap: { width: 72, height: 72, borderRadius: 36, backgroundColor: "#EEF3FF", alignItems: "center", justifyContent: "center", marginBottom: 4 },
+  emptyTitle: { fontSize: 15, fontWeight: "700", color: "#1F2937" },
+  emptySub: { fontSize: 13, color: "#9CA3AF", textAlign: "center", lineHeight: 19, paddingHorizontal: 28 },
 });

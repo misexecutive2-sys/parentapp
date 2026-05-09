@@ -1038,7 +1038,7 @@ import {
   Text,
   TouchableOpacity,
   ScrollView,
-  SafeAreaView,
+ 
   Alert,
   ActivityIndicator,
   StyleSheet,
@@ -1048,7 +1048,7 @@ import { Picker } from "@react-native-picker/picker";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { useTheme } from "../ThemeContext";
-
+import { SafeAreaView } from 'react-native-safe-area-context';
 export default function ExamResultsScreen() {
   const router = useRouter();
   const { theme } = useTheme();
@@ -1202,7 +1202,7 @@ export default function ExamResultsScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: theme.background }]}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: theme.background }]} edges={['top']}>
 
       {/* ══ HEADER ══ */}
       <View style={[styles.headerTop, { backgroundColor: theme.primary }]}>

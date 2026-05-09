@@ -164,13 +164,17 @@
 // }
 
 
-import { Stack } from "expo-router";
-import { ThemeProvider } from "./ThemeContext";
+// app/_layout.tsx
+import { Stack } from 'expo-router';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { View } from 'react-native';
 
-export default function Layout() {
+export default function RootLayout() {
   return (
-    <ThemeProvider>
-      <Stack screenOptions={{ headerShown: false }} />
-    </ThemeProvider>
+    <SafeAreaProvider style={{ flex: 1, backgroundColor: '#ffffff' }}>
+      <View style={{ flex: 1, backgroundColor: '#ffffff' }}>
+        <Stack screenOptions={{ headerShown: false }} />
+      </View>
+    </SafeAreaProvider>
   );
 }

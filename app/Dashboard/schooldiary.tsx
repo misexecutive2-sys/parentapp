@@ -1,15 +1,17 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
-  View, Text, TouchableOpacity, ScrollView, SafeAreaView,
+  View, Text, TouchableOpacity, ScrollView,
   RefreshControl, StyleSheet, Animated, ActivityIndicator,
-  Linking, Alert, Modal, TextInput, KeyboardAvoidingView,
-  Platform, Image,
+  Alert, Modal, TextInput, KeyboardAvoidingView,
+  Platform, Image, Dimensions, StatusBar,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { useTheme } from "../ThemeContext";
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { WebView } from 'react-native-webview';
 
 const BASE_URL      = "https://connect.schoolaid.in";
 const COMPLETED_KEY = "completedHomework";
@@ -87,7 +89,7 @@ const getFileUrl = (f: any): string => {
   const raw = f.file_url ?? f.url ?? "";
   if (!raw) return "";
   if (raw.startsWith("http")) return raw;
-  return `${BASE_URL}${raw}`;
+  return `${BASE_URL}/${raw}`;
 };
 
 const isImageFile = (f: any): boolean => {
@@ -95,6 +97,100 @@ const isImageFile = (f: any): boolean => {
   const mime = f.mime_type ?? f.type ?? "";
   return /\.(jpg|jpeg|png|gif|webp)$/i.test(url) || mime.startsWith("image/");
 };
+
+// ════════════════════════════════════════════════════════
+//  IN-APP FILE VIEWER
+// ════════════════════════════════════════════════════════
+const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
+
+const FileViewer = ({
+  visible, url, filename, isImage, onClose,
+}: {
+  visible: boolean; url: string; filename: string; isImage: boolean; onClose: () => void;
+}) => {
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => { if (visible) setLoading(true); }, [visible, url]);
+
+  if (!visible) return null;
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent={false}
+      onRequestClose={onClose}
+      statusBarTranslucent
+    >
+      <StatusBar barStyle="light-content" backgroundColor="#000" />
+      <View style={fvS.container}>
+        {/* Header */}
+        <View style={fvS.header}>
+          <TouchableOpacity
+            onPress={onClose}
+            style={fvS.closeBtn}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Text style={fvS.closeIcon}>✕</Text>
+          </TouchableOpacity>
+          <Text style={fvS.filename} numberOfLines={1}>{filename}</Text>
+          <View style={{ width: 36 }} />
+        </View>
+
+        {/* Content */}
+        <View style={fvS.content}>
+          {loading && (
+            <View style={fvS.loadingOverlay}>
+              <ActivityIndicator size="large" color="#fff" />
+              <Text style={fvS.loadingText}>Opening file…</Text>
+            </View>
+          )}
+          {isImage ? (
+            <ScrollView
+              maximumZoomScale={4}
+              minimumZoomScale={1}
+              centerContent
+              contentContainerStyle={fvS.imageScroll}
+            >
+              <Image
+                source={{ uri: url }}
+                style={fvS.fullImage}
+                resizeMode="contain"
+                onLoad={() => setLoading(false)}
+                onError={() => setLoading(false)}
+              />
+            </ScrollView>
+          ) : (
+            <WebView
+              source={{ uri: url }}
+              style={fvS.webview}
+              onLoad={() => setLoading(false)}
+              onError={() => setLoading(false)}
+              startInLoadingState={false}
+              scalesPageToFit
+              javaScriptEnabled
+              domStorageEnabled
+            />
+          )}
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
+const fvS = StyleSheet.create({
+  container:      { flex: 1, backgroundColor: "#000" },
+  header:         { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingTop: Platform.OS === "ios" ? 54 : 40, paddingBottom: 12, paddingHorizontal: 16, backgroundColor: "#111" },
+  closeBtn:       { width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.15)", alignItems: "center", justifyContent: "center" },
+  closeIcon:      { color: "#fff", fontSize: 16, fontWeight: "700" },
+  filename:       { flex: 1, color: "#fff", fontSize: 13, fontWeight: "600", textAlign: "center", marginHorizontal: 8 },
+  content:        { flex: 1 },
+  loadingOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "#000", alignItems: "center", justifyContent: "center", zIndex: 10, gap: 12 },
+  loadingText:    { color: "#fff", fontSize: 13, fontWeight: "600" },
+  imageScroll:    { flex: 1, alignItems: "center", justifyContent: "center", minHeight: SCREEN_H - 120 },
+  fullImage:      { width: SCREEN_W, height: SCREEN_H - 120 },
+  webview:        { flex: 1, backgroundColor: "#fff" },
+});
 
 // ════════════════════════════════════════════════════════
 //  SUBMISSION HISTORY
@@ -107,53 +203,76 @@ const SubmissionHistory = ({
   const [submissions, setSubmissions] = useState<SubmissionRecord[]>([]);
   const [loading,     setLoading]     = useState(false);
   const [expanded,    setExpanded]    = useState(false);
+  // ── In-app viewer state ──
+  const [viewerUrl,      setViewerUrl]      = useState("");
+  const [viewerFilename, setViewerFilename] = useState("");
+  const [viewerIsImage,  setViewerIsImage]  = useState(false);
+  const [viewerVisible,  setViewerVisible]  = useState(false);
 
-const fetchSubmissions = useCallback(() => {
-  if (!studentId || !token || !homeworkId) return;
-  console.log("🚀 Fetching submissions for homework:", homeworkId);
-  setLoading(true);
+  const openFile = (url: string, filename: string, isImage: boolean) => {
+    setViewerUrl(url);
+    setViewerFilename(filename);
+    setViewerIsImage(isImage);
+    setViewerVisible(true);
+  };
 
-  const xhr = new XMLHttpRequest();
-  xhr.open("GET", `${BASE_URL}/api/homework/my-submissions`);
-  xhr.setRequestHeader("Authorization", `Bearer ${token}`);
-  xhr.setRequestHeader("Content-Type", "application/json");
+  const fetchSubmissions = useCallback(async () => {
+    if (!studentId || !token || !homeworkId) return;
+    console.log("🚀 Fetching submissions for homework:", homeworkId);
+    setLoading(true);
 
-  xhr.onload = () => {
-    console.log("📥 Status:", xhr.status);
-    console.log("📥 Body:", xhr.responseText);
     try {
-      const data = JSON.parse(xhr.responseText);
-      const all: SubmissionRecord[] = data.submissions ?? [];
-      const mine = all.filter((s) => String(s.homework_id) === String(homeworkId));
-      console.log("✅ My submissions:", mine.length);
-      setSubmissions(mine);
+      const response = await fetch(
+        `${BASE_URL}/api/homework/my-submissions?student_id=${studentId}`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      const data = await response.json();
+      console.log("📥 Status:", response.status);
+      console.log("📥 Body:", data);
+
+      if (response.ok) {
+        const all = data.submissions ?? [];
+        const mine = all.filter((s: any) => String(s.homework_id) === String(homeworkId));
+        console.log("✅ My submissions:", mine.length);
+        console.log("📎 Attachments in first submission:", mine[0]?.attachments);
+        setSubmissions(mine);
+      } else {
+        console.log("❌ Error:", data.message);
+        setSubmissions([]);
+      }
     } catch (err) {
-      console.log("Parse error:", err);
+      console.log("❌ Fetch error:", err);
+      setSubmissions([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [studentId, token, homeworkId]);
 
-  xhr.onerror = () => {
-    console.log("❌ XHR error");
-    setLoading(false);
-  };
-
-  xhr.send(JSON.stringify({ student_id: Number(studentId) }));
-}, [studentId, token, homeworkId]);
-
-  // ✅ Fetch when expanded OR when refreshTrigger fires
   useEffect(() => {
     if (expanded) fetchSubmissions();
   }, [expanded, fetchSubmissions]);
 
-  // ✅ Re-fetch on refreshTrigger even if already expanded
   useEffect(() => {
     if (refreshTrigger > 0) fetchSubmissions();
   }, [refreshTrigger, fetchSubmissions]);
 
   return (
     <View style={hS.wrapper}>
+      <FileViewer
+        visible={viewerVisible}
+        url={viewerUrl}
+        filename={viewerFilename}
+        isImage={viewerIsImage}
+        onClose={() => setViewerVisible(false)}
+      />
+
       <TouchableOpacity
         style={hS.toggleRow}
         onPress={() => setExpanded((p) => !p)}
@@ -178,21 +297,19 @@ const fetchSubmissions = useCallback(() => {
           </View>
         ) : (
           submissions.map((sub, idx) => {
-            // In the render map:
-            const dateStr = sub.submitted_at ?? sub.created_at ?? sub.createdAt ?? "";
-            const text         = sub.submission_text ?? sub.text ?? sub.comment ?? "";
-            const status       = sub.status ?? "Submitted";
-            const files: any[] = sub.attachment ?? [];
-            const statusColor  =
+            const dateStr     = sub.submitted_at ?? sub.created_at ?? sub.createdAt ?? "";
+            const text        = sub.submission_text ?? sub.text ?? sub.comment ?? "";
+            const status      = sub.status ?? "Submitted";
+            const attachments = sub.attachments ?? [];
+            const statusColor =
               status.toLowerCase() === "graded"   ? "#059669" :
               status.toLowerCase() === "rejected"  ? "#DC2626" : "#D97706";
 
-            const images = files.filter((f) => isImageFile(f));
-            const docs   = files.filter((f) => !isImageFile(f));
+            const images = attachments.filter((f: any) => isImageFile(f));
+            const docs   = attachments.filter((f: any) => !isImageFile(f));
 
             return (
               <View key={String(sub.id ?? idx)} style={hS.card}>
-                {/* Card header */}
                 <View style={hS.cardHeader}>
                   <Text style={hS.cardIndex}>#{idx + 1}</Text>
                   {!!dateStr && (
@@ -203,21 +320,22 @@ const fetchSubmissions = useCallback(() => {
                   </View>
                 </View>
 
-                {/* Submission text */}
                 {!!text && <Text style={hS.subText}>{text}</Text>}
 
-                {/* Image thumbnails */}
+                {/* Images section */}
                 {images.length > 0 && (
                   <View style={hS.imagesSection}>
                     <Text style={hS.sectionLabel}>📷 Images ({images.length})</Text>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 6 }}>
                       <View style={{ flexDirection: "row", gap: 8 }}>
-                        {images.map((f, fi) => {
-                          const url = getFileUrl(f);
+                        {images.map((f: any, fi: number) => {
+                          const url      = getFileUrl(f);
+                          const fname    = f.original_name ?? f.filename ?? f.name ?? `Image ${fi + 1}`;
+                          console.log(`🖼️ Image ${fi + 1} URL:`, url);
                           return (
                             <TouchableOpacity
                               key={fi}
-                              onPress={() => url && Linking.openURL(url)}
+                              onPress={() => url && openFile(url, fname, true)}
                               activeOpacity={0.85}
                               style={hS.imageItem}
                             >
@@ -225,10 +343,9 @@ const fetchSubmissions = useCallback(() => {
                                 source={{ uri: url }}
                                 style={hS.imageThumbnail}
                                 resizeMode="cover"
+                                onError={(e) => console.log(`❌ Image load error:`, e.nativeEvent.error)}
                               />
-                              <Text style={hS.imageLabel} numberOfLines={1}>
-                                {f.original_name ?? f.filename ?? f.name ?? `Image ${fi + 1}`}
-                              </Text>
+                              <Text style={hS.imageLabel} numberOfLines={1}>{fname}</Text>
                             </TouchableOpacity>
                           );
                         })}
@@ -237,24 +354,24 @@ const fetchSubmissions = useCallback(() => {
                   </View>
                 )}
 
-                {/* Document chips */}
+                {/* Documents section */}
                 {docs.length > 0 && (
                   <View style={hS.docsSection}>
                     <Text style={hS.sectionLabel}>📎 Files ({docs.length})</Text>
                     <View style={{ gap: 6, marginTop: 6 }}>
-                      {docs.map((f, fi) => {
-                        const url = getFileUrl(f);
+                      {docs.map((f: any, fi: number) => {
+                        const url   = getFileUrl(f);
+                        const fname = f.original_name ?? f.filename ?? f.name ?? `File ${fi + 1}`;
+                        console.log(`📄 Document ${fi + 1} URL:`, url);
                         return (
                           <TouchableOpacity
                             key={fi}
                             style={hS.fileChip}
-                            onPress={() => url && Linking.openURL(url)}
+                            onPress={() => url && openFile(url, fname, false)}
                             activeOpacity={0.8}
                           >
                             <Text style={hS.fileChipIcon}>📄</Text>
-                            <Text style={hS.fileChipName} numberOfLines={1}>
-                              {f.original_name ?? f.filename ?? f.name ?? `File ${fi + 1}`}
-                            </Text>
+                            <Text style={hS.fileChipName} numberOfLines={1}>{fname}</Text>
                             <Text style={hS.fileChipOpen}>Open ↗</Text>
                           </TouchableOpacity>
                         );
@@ -299,8 +416,6 @@ const hS = StyleSheet.create({
   fileChipOpen:   { fontSize: 11, color: "#4F46E5", fontWeight: "800" },
 });
 
-
-
 // ════════════════════════════════════════════════════════
 //  SUBMISSION MODAL
 // ════════════════════════════════════════════════════════
@@ -330,23 +445,23 @@ const SubmissionModal = ({
     } catch { Alert.alert("Error", "Could not pick document."); }
   };
 
-const pickImage = async () => {
-  const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-  if (status !== "granted") { Alert.alert("Permission Required", "Please allow photo library access."); return; }
-  const r = await ImagePicker.launchImageLibraryAsync({
-    mediaTypes: ImagePicker.MediaTypeOptions.Images,  // ✅ just use this directly
-    allowsMultipleSelection: true,
-    quality: 0.8,
-  });
-  if (r.canceled) return;
-  setFiles((p) => [...p, ...r.assets.map((a) => ({
-    uri: a.uri,
-    name: a.fileName ?? `photo_${Date.now()}.jpg`,
-    type: a.mimeType ?? "image/jpeg",
-    size: a.fileSize,
-    isImage: true,
-  }))]);
-};
+  const pickImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") { Alert.alert("Permission Required", "Please allow photo library access."); return; }
+    const r = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsMultipleSelection: true,
+      quality: 0.8,
+    });
+    if (r.canceled) return;
+    setFiles((p) => [...p, ...r.assets.map((a) => ({
+      uri: a.uri,
+      name: a.fileName ?? `photo_${Date.now()}.jpg`,
+      type: a.mimeType ?? "image/jpeg",
+      size: a.fileSize,
+      isImage: true,
+    }))]);
+  };
 
   const pickCamera = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -360,71 +475,70 @@ const pickImage = async () => {
     }]);
   };
 
-const handleSubmit = async () => {
-  if (!item) return;
-  if (isSubmittingRef.current) return;
-  if (!submissionText.trim() && files.length === 0) {
-    Alert.alert("Empty Submission", "Please add a comment or attach at least one file.");
-    return;
-  }
-
-  isSubmittingRef.current = true;
-  setSubmitting(true);
-
-  try {
-    const fd = new FormData();
-    fd.append("homework_id",     String(item.id));
-    fd.append("student_id",      String(studentId));
-    fd.append("submission_text", submissionText.trim());
-
-    // ✅ singular "attachment" — matches backend exactly
-    files.forEach((f) => {
-      fd.append("attachment", {
-        uri:  f.uri,
-        name: f.name,
-        type: f.type,
-      } as any);
-    });
-
-    // 🔍 log
-    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    console.log("📤 homework_id :", String(item.id));
-    console.log("📤 student_id  :", String(studentId));
-    console.log("📤 text        :", submissionText.trim());
-    console.log("📤 files count :", files.length);
-    files.forEach((f, i) => {
-      console.log(`📤 file[${i}]    :`, { name: f.name, type: f.type, size: f.size, uri: f.uri });
-    });
-    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-
-    const res = await fetch(`${BASE_URL}/api/homework/submit?student_id=${studentId}`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-      body: fd,
-    });
-
-    const raw = await res.text();
-    console.log("📥 Status:", res.status);
-    console.log("📥 Body  :", raw);
-    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-
-    if (!res.ok) {
-      let e: any = {};
-      try { e = JSON.parse(raw); } catch {}
-      throw new Error(e.message ?? e.error ?? `Server error: ${res.status}`);
+  const handleSubmit = async () => {
+    if (!item) return;
+    if (isSubmittingRef.current) return;
+    if (!submissionText.trim() && files.length === 0) {
+      Alert.alert("Empty Submission", "Please add a comment or attach at least one file.");
+      return;
     }
 
-    onSubmitSuccess(item.id);
-    onClose();
-    Alert.alert("Success 🎉", "Homework submitted successfully!");
-  } catch (err: any) {
-    console.log("💥 Submit error:", err.message);
-    Alert.alert("Submission Failed", err.message ?? "Could not submit homework.");
-  } finally {
-    isSubmittingRef.current = false;
-    setSubmitting(false);
-  }
-};
+    isSubmittingRef.current = true;
+    setSubmitting(true);
+
+    try {
+      const fd = new FormData();
+      fd.append("homework_id",     String(item.id));
+      fd.append("student_id",      String(studentId));
+      fd.append("submission_text", submissionText.trim());
+
+      files.forEach((f) => {
+        fd.append("attachments", {
+          uri:  f.uri,
+          name: f.name,
+          type: f.type,
+        } as any);
+      });
+
+      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+      console.log("📤 homework_id :", String(item.id));
+      console.log("📤 student_id  :", String(studentId));
+      console.log("📤 text        :", submissionText.trim());
+      console.log("📤 files count :", files.length);
+      files.forEach((f, i) => {
+        console.log(`📤 file[${i}]    :`, { name: f.name, type: f.type, size: f.size, uri: f.uri });
+      });
+      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+      const res = await fetch(`${BASE_URL}/api/homework/submit?student_id=${studentId}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
+      });
+
+      const raw = await res.text();
+      console.log("📥 Status:", res.status);
+      console.log("📥 Body  :", raw);
+      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+      if (!res.ok) {
+        let e: any = {};
+        try { e = JSON.parse(raw); } catch {}
+        console.log("💥 Submit error details:", e);
+        throw new Error(e.message ?? e.error ?? `Server error: ${res.status}`);
+      }
+
+      onSubmitSuccess(item.id);
+      onClose();
+      Alert.alert("Success 🎉", "Homework submitted successfully!");
+    } catch (err: any) {
+      console.log("💥 Submit error:", err.message);
+      Alert.alert("Submission Failed", err.message ?? "Could not submit homework.");
+    } finally {
+      isSubmittingRef.current = false;
+      setSubmitting(false);
+    }
+  };
 
   if (!item) return null;
   const color = getSubjectColor(item.subject);
@@ -553,6 +667,20 @@ const HomeworkCard = ({
 }) => {
   const [expanded,      setExpanded]      = useState(false);
   const [submitRefresh, setSubmitRefresh] = useState(0);
+  // ── In-app viewer for homework attachment ──
+  const [viewerUrl,      setViewerUrl]      = useState("");
+  const [viewerFilename, setViewerFilename] = useState("");
+  const [viewerIsImage,  setViewerIsImage]  = useState(false);
+  const [viewerVisible,  setViewerVisible]  = useState(false);
+
+  const openAttachment = (url: string, filename: string) => {
+    const isImg = /\.(jpg|jpeg|png|gif|webp)$/i.test(url);
+    setViewerUrl(url);
+    setViewerFilename(filename);
+    setViewerIsImage(isImg);
+    setViewerVisible(true);
+  };
+
   const checkAnim = useRef(new Animated.Value(isCompleted ? 1 : 0)).current;
   const color     = getSubjectColor(item.subject);
   const daysLeft  = getDaysLeft(item.dueDate);
@@ -570,6 +698,14 @@ const HomeworkCard = ({
       activeOpacity={0.92}
       style={[s.card, !item.read && !isCompleted && s.cardUnread, isCompleted && s.cardCompleted]}
     >
+      <FileViewer
+        visible={viewerVisible}
+        url={viewerUrl}
+        filename={viewerFilename}
+        isImage={viewerIsImage}
+        onClose={() => setViewerVisible(false)}
+      />
+
       <View style={[s.cardAccent, { backgroundColor: isCompleted ? "#A7F3D0" : color }]} />
       <View style={s.cardContent}>
 
@@ -616,10 +752,14 @@ const HomeworkCard = ({
             {!!item.body && <Text style={s.homeworkBody}>{item.body}</Text>}
             {isCompleted && <Text style={s.completedMsg}>✅ Marked as completed</Text>}
             {item.attachment && (
-              <TouchableOpacity style={s.attachmentBtn} onPress={() => Linking.openURL(item.attachment!.url)} activeOpacity={0.8}>
+              <TouchableOpacity
+                style={s.attachmentBtn}
+                onPress={() => openAttachment(item.attachment!.url, item.attachment!.filename)}
+                activeOpacity={0.8}
+              >
                 <Text style={s.attachmentIcon}>📎</Text>
                 <Text style={s.attachmentText} numberOfLines={1}>{item.attachment.filename}</Text>
-                <Text style={s.attachmentDownload}>Download</Text>
+                <Text style={s.attachmentDownload}>Open ↗</Text>
               </TouchableOpacity>
             )}
             <TouchableOpacity
@@ -631,7 +771,6 @@ const HomeworkCard = ({
               <Text style={[hwS.submitHwText, { color }]}>Submit Homework</Text>
             </TouchableOpacity>
 
-            {/* ✅ Pass studentId & token directly */}
             <SubmissionHistory
               homeworkId={item.id}
               studentId={studentId}
@@ -886,7 +1025,7 @@ export default function SchoolDiaryScreen() {
                                notifications.filter((n) => n.type === "comment");
 
   return (
-    <SafeAreaView style={[s.safe, { backgroundColor: theme.background }]}>
+    <SafeAreaView style={[s.safe, { backgroundColor: theme.background }]} edges={['top']}>
 
       {/* Header */}
       <View style={[s.headerTop, { backgroundColor: theme.primary }]}>

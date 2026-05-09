@@ -108,11 +108,11 @@ export default function LoginScreen() {
   );
   // -----------------------------Login and Forgot Password Handlers-----------------------------
   const handleLogin = async () => {
-    if (lockoutUntil && Date.now() < lockoutUntil) {
-      const secondsLeft = Math.ceil((lockoutUntil - Date.now()) / 1000);
-      Alert.alert("Too Many Attempts", `Please wait ${secondsLeft}s before trying again.`);
-      return;
-    }
+    // if (lockoutUntil && Date.now() < lockoutUntil) {
+    //   const secondsLeft = Math.ceil((lockoutUntil - Date.now()) / 1000);
+    //   Alert.alert("Too Many Attempts", `Please wait ${secondsLeft}s before trying again.`);
+    //   return;
+    // }
 
     if (!isValidMobile(mobile)) {
       Alert.alert("Invalid Input", "Please enter a valid mobile number.");

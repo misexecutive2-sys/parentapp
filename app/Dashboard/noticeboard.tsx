@@ -3,7 +3,7 @@ import {
   View,
   Text,
   ScrollView,
-  SafeAreaView,
+
   RefreshControl,
   Alert,
   TouchableOpacity,
@@ -14,7 +14,7 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { useTheme } from "../ThemeContext";
-
+import { SafeAreaView } from 'react-native-safe-area-context';
 const BASE_URL = "https://connect.schoolaid.in";
 
 export default function StudentNoticeBoard() {
@@ -159,7 +159,7 @@ export default function StudentNoticeBoard() {
     ], { cancelable: true });
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: theme.background }]}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: theme.background }]} edges={['top']}>
       {/* Header */}
  <View style={[styles.headerTop, { backgroundColor: theme.primary }]}>
         <View style={styles.headerTopRow}>

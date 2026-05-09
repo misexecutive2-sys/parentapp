@@ -14,7 +14,7 @@ import { Picker } from "@react-native-picker/picker";
 import { router, useLocalSearchParams, useFocusEffect } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
   aggregateAndStoreNotifications,
@@ -48,13 +48,11 @@ export default function DashboardScreen() {
   const [sidebarOpen,    setSidebarOpen]    = useState(false);
   const [unreadCount,    setUnreadCount]    = useState(0);
 
-  // ── On mount ─────────────────────────────────────────────
   useEffect(() => {
     fetchYears();
     fetchAndCountNotifications();
   }, []);
 
-  // ── Re-sync bell when screen comes into focus ─────────────
   useFocusEffect(
     React.useCallback(() => {
       loadStoredNotifications().then((stored) => {
@@ -63,7 +61,6 @@ export default function DashboardScreen() {
     }, [])
   );
 
-  // ── Persist child params ──────────────────────────────────
   useEffect(() => {
     if (childId && childName && classname && sectionname) {
       AsyncStorage.setItem(
@@ -109,23 +106,23 @@ export default function DashboardScreen() {
     await AsyncStorage.setItem("selectedYearLabel", y?.year ?? String(yearId));
   };
 
-const handleLogout = () => {
-  setSidebarOpen(false);
-  Alert.alert("Logout", "Are you sure you want to log out?", [
-    { text: "Cancel", style: "cancel" },
-    {
-      text: "Yes", style: "destructive",
-      onPress: async () => {
-        await clearNotificationData(); // ✅ clears both keys
-        await AsyncStorage.multiRemove([
-          "token", "user", "selectedChild",
-          "selectedYearId", "selectedYearLabel",
-        ]);
-        router.replace("/login");
+  const handleLogout = () => {
+    setSidebarOpen(false);
+    Alert.alert("Logout", "Are you sure you want to log out?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Yes", style: "destructive",
+        onPress: async () => {
+          await clearNotificationData();
+          await AsyncStorage.multiRemove([
+            "token", "user", "selectedChild",
+            "selectedYearId", "selectedYearLabel",
+          ]);
+          router.replace("/login");
+        },
       },
-    },
-  ]);
-};
+    ]);
+  };
 
   const handleSwitchChild = () => {
     setSidebarOpen(false);
@@ -162,7 +159,9 @@ const handleLogout = () => {
   const selectedYearLabel = years.find((y) => y.id === selectedYearId)?.year ?? "";
 
   return (
-    <SafeAreaProvider style={styles.safe}>
+    // ✅ KEY FIX: SafeAreaView with edges={['top']} + backgroundColor = PRIMARY
+    // This makes the status bar area blue instead of white
+    <SafeAreaView style={styles.safe} edges={['top']}>
       <StatusBar barStyle="light-content" backgroundColor={PRIMARY} />
 
       {/* ── HEADER ─────────────────────────────────────────── */}
@@ -242,6 +241,7 @@ const handleLogout = () => {
       <ScrollView
         contentContainerStyle={styles.grid}
         showsVerticalScrollIndicator={false}
+        style={styles.scrollBg}
       >
         <Text style={styles.gridLabel}>Quick Access</Text>
         <View style={styles.gridWrap}>
@@ -380,12 +380,14 @@ const handleLogout = () => {
           </View>
         </View>
       </Modal>
-    </SafeAreaProvider>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe:            { flex: 1, backgroundColor: "#F4F6FB" },
+  // ✅ FIX: backgroundColor PRIMARY so status bar notch area is blue
+  safe:            { flex: 1, backgroundColor: PRIMARY },
+  scrollBg:        { flex: 1, backgroundColor: PRIMARY },
 
   // Header
   header:          { backgroundColor: PRIMARY, paddingBottom: 16, borderBottomLeftRadius: 28, borderBottomRightRadius: 28, elevation: 8, shadowColor: PRIMARY, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 12 },

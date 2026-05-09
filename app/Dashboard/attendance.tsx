@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useCallback } from "react";
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  SafeAreaView, Alert, ActivityIndicator, Modal, TextInput,
+  Alert, ActivityIndicator, Modal, TextInput,
 } from "react-native";
+import Svg, { Path, Circle, Defs, LinearGradient, Stop } from "react-native-svg";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { useTheme } from "../ThemeContext";
-
+import { SafeAreaView } from "react-native-safe-area-context";
 
 const API_BASE = "https://connect.schoolaid.in";
 
@@ -47,7 +48,6 @@ function fmtDisplay(dateStr: string): string {
     if (!isNaN(date.getTime())) {
       return date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
     }
-    // fallback: try plain YYYY-MM-DD
     const [y, m, d] = dateStr.split("-");
     return `${d} ${MONTHS_SHORT[parseInt(m) - 1]} ${y}`;
   } catch {
@@ -71,6 +71,197 @@ function datesBetween(from: string, to: string): string[] {
   }
   return result;
 }
+
+// ── Trend Chart Component ─────────────────────────────────────────────────────
+
+function AttendanceTrendChart({ calendarData, currentMonth, currentYear }: {
+  calendarData: DayAttendance[];
+  currentMonth: number;
+  currentYear: number;
+}) {
+  const sorted = [...calendarData]
+    .filter(d => d.status !== null)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  if (sorted.length < 2) {
+    return (
+      <View style={tStyles.wrap}>
+        <View style={tStyles.header}>
+          <Text style={tStyles.title}>Attendance Trend</Text>
+          <Text style={tStyles.sub}>{MONTHS[currentMonth]} {currentYear}</Text>
+        </View>
+        <View style={tStyles.empty}>
+          <Text style={tStyles.emptyTxt}>Not enough data to show trend</Text>
+        </View>
+      </View>
+    );
+  }
+
+  const W = 300, H = 100, PX = 12, PY = 14;
+  const innerW = W - PX * 2;
+  const innerH = H - PY * 2;
+
+  // Build running attendance % per day
+  let rP = 0, rW = 0;
+  const points = sorted.map((d, i) => {
+    if (d.status !== "H") rW++;
+    if (d.status === "P") rP++;
+    const pct = rW > 0 ? rP / rW : 0;
+    const x = PX + (i / Math.max(sorted.length - 1, 1)) * innerW;
+    const y = PY + (1 - pct) * innerH;
+    return { x, y, pct, date: d.date, status: d.status };
+  });
+
+  // Smooth cubic bezier path
+  const linePath = points.map((p, i) => {
+    if (i === 0) return `M ${p.x.toFixed(1)} ${p.y.toFixed(1)}`;
+    const prev = points[i - 1];
+    const cpX = ((prev.x + p.x) / 2).toFixed(1);
+    return `C ${cpX} ${prev.y.toFixed(1)} ${cpX} ${p.y.toFixed(1)} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`;
+  }).join(" ");
+
+  const areaPath = `${linePath} L ${points[points.length - 1].x.toFixed(1)} ${(H - PY).toFixed(1)} L ${points[0].x.toFixed(1)} ${(H - PY).toFixed(1)} Z`;
+
+  const lastPct = points[points.length - 1]?.pct ?? 0;
+  const lineColor = lastPct >= 0.75 ? "#16a34a" : lastPct >= 0.5 ? "#f59e0b" : "#dc2626";
+  const statusLabel = lastPct >= 0.75 ? "Good" : lastPct >= 0.5 ? "Average" : "Low";
+
+  // Guide lines at 75% and 50%
+  const guide75Y = (PY + (1 - 0.75) * innerH).toFixed(1);
+  const guide50Y = (PY + (1 - 0.5) * innerH).toFixed(1);
+
+  // Only show dots at first, last, and key turning points
+  const keyPoints = points.filter((p, i) => {
+    if (i === 0 || i === points.length - 1) return true;
+    const prev = points[i - 1];
+    const next = points[i + 1];
+    const isPeak = p.pct > prev.pct && p.pct > next.pct;
+    const isDip = p.pct < prev.pct && p.pct < next.pct;
+    return isPeak || isDip;
+  });
+
+  return (
+    <View style={tStyles.wrap}>
+      {/* Header */}
+      <View style={tStyles.header}>
+        <View>
+          <Text style={tStyles.title}>Attendance Trend</Text>
+          <Text style={tStyles.sub}>{MONTHS[currentMonth]} {currentYear}</Text>
+        </View>
+        <View style={[tStyles.badge, { backgroundColor: lineColor + "18", borderColor: lineColor + "50" }]}>
+          <Text style={[tStyles.badgePct, { color: lineColor }]}>{(lastPct * 100).toFixed(1)}%</Text>
+          <Text style={[tStyles.badgeLabel, { color: lineColor }]}>{statusLabel}</Text>
+        </View>
+      </View>
+
+      {/* SVG Chart */}
+      <Svg width={W} height={H}>
+        <Defs>
+          <LinearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0%" stopColor={lineColor} stopOpacity="0.20" />
+            <Stop offset="100%" stopColor={lineColor} stopOpacity="0.02" />
+          </LinearGradient>
+        </Defs>
+
+        {/* 75% guide */}
+        <Path
+          d={`M ${PX} ${guide75Y} L ${W - PX} ${guide75Y}`}
+          stroke="#E2E8F0"
+          strokeWidth="1"
+          strokeDasharray="3 3"
+        />
+        {/* 50% guide */}
+        <Path
+          d={`M ${PX} ${guide50Y} L ${W - PX} ${guide50Y}`}
+          stroke="#E2E8F0"
+          strokeWidth="1"
+          strokeDasharray="3 3"
+        />
+
+        {/* Area fill under curve */}
+        <Path d={areaPath} fill="url(#trendGrad)" />
+
+        {/* Trend line */}
+        <Path
+          d={linePath}
+          stroke={lineColor}
+          strokeWidth="2.5"
+          fill="none"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+
+        {/* Key point dots */}
+        {keyPoints.map((p, i) => (
+          <Circle
+            key={`kp-${i}`}
+            cx={p.x}
+            cy={p.y}
+            r="4"
+            fill="#fff"
+            stroke={lineColor}
+            strokeWidth="2"
+          />
+        ))}
+      </Svg>
+
+      {/* X-axis labels */}
+      <View style={tStyles.xRow}>
+        <Text style={tStyles.xLabel}>{sorted[0]?.date.slice(8)} {MONTHS_SHORT[currentMonth]}</Text>
+        <Text style={tStyles.xLabel}>{sorted[Math.floor(sorted.length / 2)]?.date.slice(8)} {MONTHS_SHORT[currentMonth]}</Text>
+        <Text style={tStyles.xLabel}>{sorted[sorted.length - 1]?.date.slice(8)} {MONTHS_SHORT[currentMonth]}</Text>
+      </View>
+
+      {/* Y-axis legend */}
+      <View style={tStyles.yLegend}>
+        <View style={tStyles.yItem}>
+          <View style={[tStyles.yDash, { backgroundColor: "#E2E8F0" }]} />
+          <Text style={tStyles.yLabel}>75%</Text>
+        </View>
+        <View style={tStyles.yItem}>
+          <View style={[tStyles.yDash, { backgroundColor: "#E2E8F0" }]} />
+          <Text style={tStyles.yLabel}>50%</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+const tStyles = StyleSheet.create({
+  wrap: {
+    width: "100%", backgroundColor: "#fff", borderRadius: 14,
+    padding: 14, marginBottom: 14, borderWidth: 1, borderColor: "#E8EEF8",
+  },
+  header: {
+    flexDirection: "row", alignItems: "flex-start",
+    justifyContent: "space-between", marginBottom: 10,
+  },
+  title: { fontSize: 13, fontWeight: "800", color: "#1A1A2E" },
+  sub: { fontSize: 10, color: "#aaa", marginTop: 2 },
+  badge: {
+    alignItems: "center", paddingHorizontal: 10, paddingVertical: 5,
+    borderRadius: 20, borderWidth: 1,
+  },
+  badgePct: { fontSize: 13, fontWeight: "800" },
+  badgeLabel: { fontSize: 9, fontWeight: "600", marginTop: 1 },
+  xRow: {
+    flexDirection: "row", justifyContent: "space-between",
+    paddingHorizontal: 12, marginTop: 4,
+  },
+  xLabel: { fontSize: 9, color: "#bbb", fontWeight: "600" },
+  yLegend: {
+    flexDirection: "row", gap: 12, marginTop: 8,
+    paddingHorizontal: 4,
+  },
+  yItem: { flexDirection: "row", alignItems: "center", gap: 4 },
+  yDash: { width: 14, height: 1.5 },
+  yLabel: { fontSize: 9, color: "#bbb", fontWeight: "600" },
+  empty: {
+    height: 80, alignItems: "center", justifyContent: "center",
+    backgroundColor: "#F8FAFF", borderRadius: 10,
+  },
+  emptyTxt: { fontSize: 12, color: "#bbb" },
+});
 
 // ── CalendarPicker ────────────────────────────────────────────────────────────
 
@@ -159,11 +350,7 @@ function CalendarPicker({ fromDate, toDate, onFromChange, onToChange }: Calendar
           return (
             <TouchableOpacity
               key={dateStr}
-              style={[
-                cp.cell,
-                isInRange && cp.cellInRange,
-                (isFrom || isTo) && cp.cellSelected,
-              ]}
+              style={[cp.cell, isInRange && cp.cellInRange, (isFrom || isTo) && cp.cellSelected]}
               onPress={() => handleDayPress(dateStr)}
               activeOpacity={0.7}
             >
@@ -237,24 +424,20 @@ export default function AttendanceScreen() {
   const now = new Date();
   const { theme } = useTheme();
 
-  // ── Child / auth state ──
   const [childName, setChildName] = useState("Student");
   const [childClass, setChildClass] = useState("—");
   const [childSection, setChildSection] = useState("—");
   const [studentId, setStudentId] = useState("");
   const [authToken, setAuthToken] = useState("");
 
-  // ── Calendar state ──
   const [currentMonth, setCurrentMonth] = useState(now.getMonth());
   const [currentYear, setCurrentYear] = useState(now.getFullYear());
   const [calendarData, setCalendarData] = useState<DayAttendance[]>([]);
   const [activeFilter, setActiveFilter] = useState<FilterType>(null);
   const [loading, setLoading] = useState(false);
 
-  // ── Modal state ──
   const [activeModal, setActiveModal] = useState<"monthly" | "session" | "apply" | "history" | null>(null);
 
-  // ── Leave state ──
   const [leaveRecords, setLeaveRecords] = useState<LeaveRecord[]>([]);
   const [leaveFrom, setLeaveFrom] = useState("");
   const [leaveTo, setLeaveTo] = useState("");
@@ -263,11 +446,9 @@ export default function AttendanceScreen() {
   const [cancelling, setCancelling] = useState<string | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
 
-  // ── Tapped day state ──
   const [tappedDate, setTappedDate] = useState<string | null>(null);
   const [tappedLeave, setTappedLeave] = useState<LeaveRecord | null>(null);
 
-  // ── Derived leave sets ──
   const leaveDatesSet = new Set<string>(
     leaveRecords.flatMap(r => datesBetween(r.from_date, r.to_date))
   );
@@ -288,50 +469,38 @@ export default function AttendanceScreen() {
       if (!childStr || !token) return;
 
       const child = JSON.parse(childStr);
-      let classId = child.class_id;
-      let sectionId = child.section_id;
+      const sid = child.id ?? child.student_id ?? child.studentId ?? "";
 
-      if (!classId || !sectionId) {
-        const examRes = await fetch(`${API_BASE}/api/app/student-exams`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-            "x-academic-year": yearId ?? "16",
-          },
-          body: JSON.stringify({ student_id: child.id }),
-        });
-        const examData = await examRes.json();
-        classId = examData.class_id;
-        sectionId = examData.section_id;
-        await AsyncStorage.setItem("selectedChild", JSON.stringify({
-          ...child, class_id: classId, section_id: sectionId,
-        }));
-      }
-
-      if (!classId || !sectionId) {
-        setCalendarData([]);
-        return;
-      }
+      if (!sid) { setCalendarData([]); return; }
 
       const res = await fetch(
-        `${API_BASE}/api/attendance/monthly?class_id=${classId}&section_id=${sectionId}&month=${currentMonth + 1}&year=${currentYear}`,
-        { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" } }
+        `${API_BASE}/api/attendance/monthly/${sid}?month=${currentMonth + 1}&year=${currentYear}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "x-academic-year": yearId ?? "16",
+            Accept: "application/json",
+          },
+        }
       );
 
       const data = await res.json();
-      const list = Array.isArray(data) ? data
-        : Array.isArray(data.students) ? data.students
-        : Array.isArray(data.data) ? data.data : [];
 
-      const studentRecord = list.find(
-        (s: any) => String(s.id) === String(child.id) ||
-          String(s.student_id) === String(child.id)
-      );
+      let rawRecords: any[] = [];
+      if (Array.isArray(data)) rawRecords = data;
+      else if (Array.isArray(data.attendance)) rawRecords = data.attendance;
+      else if (Array.isArray(data.data)) rawRecords = data.data;
+      else if (Array.isArray(data.records)) rawRecords = data.records;
 
-      const records: DayAttendance[] = (
-        studentRecord?.attendance ?? studentRecord?.records ?? []
-      ).map((r: any) => ({ date: r.date, status: r.status as AttendanceStatus }));
+      const statusMap: Record<string, AttendanceStatus> = {
+        present: "P", absent: "A", leave: "L", holiday: "H",
+        p: "P", a: "A", l: "L", h: "H",
+      };
+
+      const records: DayAttendance[] = rawRecords.map((r: any) => ({
+        date: r.date ? r.date.split("T")[0] : "",
+        status: statusMap[String(r.status).toLowerCase()] ?? null,
+      }));
 
       setCalendarData(records);
     } catch (error: any) {
@@ -350,10 +519,7 @@ export default function AttendanceScreen() {
     try {
       const res = await fetch(`${API_BASE}/api/leaves/student?student_id=${sid}`, {
         method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-        },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
@@ -361,8 +527,7 @@ export default function AttendanceScreen() {
         : Array.isArray(data.leaves) ? data.leaves
         : Array.isArray(data.data) ? data.data
         : Array.isArray(data.records) ? data.records
-        : Array.isArray(data.result) ? data.result
-        : [];
+        : Array.isArray(data.result) ? data.result : [];
       setLeaveRecords(records);
     } catch (error: any) {
       console.error("Failed to fetch leave history:", error);
@@ -378,9 +543,7 @@ export default function AttendanceScreen() {
     const bootstrap = async () => {
       let sid = "";
       let token = "";
-
       try { token = (await AsyncStorage.getItem("token")) ?? ""; } catch {}
-
       try {
         const raw = await AsyncStorage.getItem("selectedChild");
         if (raw) {
@@ -392,7 +555,6 @@ export default function AttendanceScreen() {
             ?? c.userId ?? c.user_id ?? c.admissionNo ?? "";
         }
       } catch {}
-
       if (!sid && token) {
         try {
           const base64Url = token.split(".")[1];
@@ -414,11 +576,9 @@ export default function AttendanceScreen() {
               binary.split("").map(ch => "%" + ("00" + ch.charCodeAt(0).toString(16)).slice(-2)).join("")
             )
           );
-          sid = payload.student_id ?? payload.id ?? payload.userId
-            ?? payload.user_id ?? payload.admissionNo ?? "";
+          sid = payload.student_id ?? payload.id ?? payload.userId ?? payload.user_id ?? payload.admissionNo ?? "";
         } catch {}
       }
-
       if (sid) setStudentId(sid);
       if (token) setAuthToken(token);
       if (sid && token) fetchLeaveHistory(sid, token);
@@ -427,9 +587,7 @@ export default function AttendanceScreen() {
     bootstrap();
   }, []);
 
-  useEffect(() => {
-    fetchCalendar();
-  }, [currentMonth, currentYear]);
+  useEffect(() => { fetchCalendar(); }, [currentMonth, currentYear]);
 
   // ── Apply leave ───────────────────────────────────────────────────────────
 
@@ -444,10 +602,7 @@ export default function AttendanceScreen() {
     try {
       const response = await fetch(`${API_BASE}/api/leaves/apply`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${authToken}`,
-        },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` },
         body: JSON.stringify({
           student_id: Number(studentId),
           from_date: leaveFrom,
@@ -455,21 +610,14 @@ export default function AttendanceScreen() {
           reason: leaveReason.trim(),
         }),
       });
-
       const result = await response.json();
-
       if (response.ok && (result.success || result.message || result.msg || result.leave_id)) {
         await fetchLeaveHistory(studentId, authToken);
-        setLeaveFrom("");
-        setLeaveTo("");
-        setLeaveReason("");
+        setLeaveFrom(""); setLeaveTo(""); setLeaveReason("");
         setActiveModal(null);
         Alert.alert("✅ Success", `Leave applied from ${fmtDisplay(leaveFrom)} to ${fmtDisplay(leaveTo)}`);
       } else {
-        const errorMsg = result.errors
-          ? result.errors.join(", ")
-          : result.message ?? "Failed to apply leave";
-        Alert.alert("Error", errorMsg);
+        Alert.alert("Error", result.errors ? result.errors.join(", ") : result.message ?? "Failed to apply leave");
       }
     } catch (error: any) {
       Alert.alert("Error", `Network error: ${error.message}`);
@@ -481,50 +629,34 @@ export default function AttendanceScreen() {
   // ── Cancel leave ──────────────────────────────────────────────────────────
 
   const handleCancelLeave = (leaveId: string) => {
-    Alert.alert(
-      "Cancel Leave",
-      "Are you sure you want to cancel this leave application?",
-      [
-        { text: "No", style: "cancel" },
-        {
-          text: "Yes, Cancel",
-          style: "destructive",
-          onPress: async () => {
-            setCancelling(leaveId);
-            try {
-              const response = await fetch(`${API_BASE}/api/leaves/status`, {
-                method: "PATCH",
-                headers: {
-                  "Content-Type": "application/json",
-                  "Authorization": `Bearer ${authToken}`,
-                },
-                body: JSON.stringify({
-                  leave_id: Number(leaveId),
-                  status: "Cancelled",
-                }),
-              });
-
-              const result = await response.json();
-
-              if (response.ok && (result.success || result.message || result.msg)) {
-                setLeaveRecords(prev =>
-                  prev.map(r => r.id === leaveId ? { ...r, status: "Cancelled" } : r)
-                );
-                await fetchLeaveHistory(studentId, authToken);
-                Alert.alert("✅ Done", "Leave application has been cancelled.");
-              } else {
-                const errorMsg = result.message ?? result.errors?.join(", ") ?? "Failed to cancel leave.";
-                Alert.alert("Error", errorMsg);
-              }
-            } catch (error: any) {
-              Alert.alert("Error", `Network error: ${error.message}`);
-            } finally {
-              setCancelling(null);
+    Alert.alert("Cancel Leave", "Are you sure you want to cancel this leave application?", [
+      { text: "No", style: "cancel" },
+      {
+        text: "Yes, Cancel", style: "destructive",
+        onPress: async () => {
+          setCancelling(leaveId);
+          try {
+            const response = await fetch(`${API_BASE}/api/leaves/status`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` },
+              body: JSON.stringify({ leave_id: Number(leaveId), status: "Cancelled" }),
+            });
+            const result = await response.json();
+            if (response.ok && (result.success || result.message || result.msg)) {
+              setLeaveRecords(prev => prev.map(r => r.id === leaveId ? { ...r, status: "Cancelled" } : r));
+              await fetchLeaveHistory(studentId, authToken);
+              Alert.alert("✅ Done", "Leave application has been cancelled.");
+            } else {
+              Alert.alert("Error", result.message ?? result.errors?.join(", ") ?? "Failed to cancel leave.");
             }
-          },
+          } catch (error: any) {
+            Alert.alert("Error", `Network error: ${error.message}`);
+          } finally {
+            setCancelling(null);
+          }
         },
-      ]
-    );
+      },
+    ]);
   };
 
   // ── Helpers ───────────────────────────────────────────────────────────────
@@ -577,17 +709,12 @@ export default function AttendanceScreen() {
   const getLeaveStatusStyle = (status: LeaveRecord["status"]) => {
     const s = normalizeStatus(status);
     if (s === "Cancelled") return { bg: "#f3f4f6", text: "#6b7280", icon: "🚫" };
-    // Everything else (Pending, Approved, Rejected) treated as active/pending
     return { bg: "#fef9c3", text: "#ca8a04", icon: "🕐" };
   };
 
   const handleCalendarDayPress = (day: number) => {
     const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-    if (tappedDate === dateStr) {
-      setTappedDate(null);
-      setTappedLeave(null);
-      return;
-    }
+    if (tappedDate === dateStr) { setTappedDate(null); setTappedLeave(null); return; }
     setTappedDate(dateStr);
     setTappedLeave(leaveDateMap.get(dateStr) ?? null);
   };
@@ -599,12 +726,9 @@ export default function AttendanceScreen() {
   const leaveDays = calendarData.filter(d => d.status === "L");
   const holidayDays = calendarData.filter(d => d.status === "H");
   const workingDays = calendarData.filter(d => d.status !== "H").length;
-  const percentage = workingDays > 0
-    ? ((presentDays.length / workingDays) * 100).toFixed(1)
-    : "0.0";
+  const percentage = workingDays > 0 ? ((presentDays.length / workingDays) * 100).toFixed(1) : "0.0";
 
   const monthlyDetail = {
-    total_days: calendarData.length,
     present: presentDays.length,
     absent: absentDays.length,
     leave: leaveDays.length,
@@ -676,42 +800,33 @@ export default function AttendanceScreen() {
             ?? (leaveDatesSet.has(tappedDate) ? "L" : null);
           const s = getDayStyle(status);
           const statusLabels: Record<string, string> = { P: "Present", A: "Absent", L: "Leave", H: "Holiday" };
-
           return (
             <View style={styles.dayInfoPanel}>
               <View style={styles.dayInfoHeader}>
                 <Text style={styles.dayInfoDate}>{fmtDisplay(tappedDate)}</Text>
                 {status && (
                   <View style={[styles.dayInfoBadge, { backgroundColor: s.bg, borderColor: s.border }]}>
-                    <Text style={[styles.dayInfoBadgeText, { color: s.text }]}>
-                      {statusLabels[status] ?? status}
-                    </Text>
+                    <Text style={[styles.dayInfoBadgeText, { color: s.text }]}>{statusLabels[status] ?? status}</Text>
                   </View>
                 )}
-                <TouchableOpacity
-                  onPress={() => { setTappedDate(null); setTappedLeave(null); }}
-                  style={styles.dayInfoClose}
-                >
+                <TouchableOpacity onPress={() => { setTappedDate(null); setTappedLeave(null); }} style={styles.dayInfoClose}>
                   <Text style={styles.dayInfoCloseTxt}>✕</Text>
                 </TouchableOpacity>
               </View>
-
               {tappedLeave ? (
                 <View style={styles.dayInfoBody}>
                   <Text style={styles.dayInfoReasonLabel}>Reason</Text>
                   <Text style={styles.dayInfoReason}>{tappedLeave.reason}</Text>
                   <View style={styles.dayInfoMeta}>
-                    <Text style={styles.dayInfoMetaTxt}>
-                      {fmtDisplay(tappedLeave.from_date)} → {fmtDisplay(tappedLeave.to_date)}
-                    </Text>
+                    <Text style={styles.dayInfoMetaTxt}>{fmtDisplay(tappedLeave.from_date)} → {fmtDisplay(tappedLeave.to_date)}</Text>
                   </View>
                 </View>
               ) : (
                 <Text style={styles.dayInfoEmpty}>
-                  {status === "P" ? "Attended school on this day." :
-                    status === "A" ? "Absent on this day." :
-                      status === "H" ? "School holiday." :
-                        "No details available for this day."}
+                  {status === "P" ? "Attended school on this day."
+                    : status === "A" ? "Absent on this day."
+                    : status === "H" ? "School holiday."
+                    : "No details available for this day."}
                 </Text>
               )}
             </View>
@@ -724,7 +839,7 @@ export default function AttendanceScreen() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={["top"]}>
       {/* Header */}
       <View style={[styles.headerTop, { backgroundColor: theme.primary }]}>
         <View style={styles.headerTopRow}>
@@ -738,9 +853,7 @@ export default function AttendanceScreen() {
             <View style={styles.headerTextContainer}>
               <Text style={styles.headerTitle}>{childName}</Text>
               <View style={styles.classBadge}>
-                <Text style={styles.classBadgeText}>
-                  {childClass} {childSection && `· ${childSection}`}
-                </Text>
+                <Text style={styles.classBadgeText}>{childClass} {childSection && `· ${childSection}`}</Text>
               </View>
             </View>
           </View>
@@ -816,17 +929,17 @@ export default function AttendanceScreen() {
           <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setActiveModal(null)} />
           <View style={styles.modalSheet}>
             <View style={styles.modalDragHandle} />
-            <Text style={styles.modalTitle}>{"📊 Monthly Details"}</Text>
-            <Text style={styles.modalSubtitle}>{MONTHS[currentMonth] + " " + currentYear}</Text>
+            <Text style={styles.modalTitle}>📊 Monthly Details</Text>
+            <Text style={styles.modalSubtitle}>{MONTHS[currentMonth]} {currentYear}</Text>
 
             <ScrollView showsVerticalScrollIndicator={false} style={{ width: "100%" }} contentContainerStyle={{ paddingBottom: 20 }}>
+
+              {/* Stats grid — Present, Absent, Holidays, Percentage only */}
               <View style={styles.monthlyGrid}>
                 {[
-                  { label: "Total Days", value: monthlyDetail.total_days, color: PRIMARY, bg: "#EFF6FF" },
-                  { label: "Present", value: monthlyDetail.present, color: "#16a34a", bg: "#dcfce7" },
-                  { label: "Absent", value: monthlyDetail.absent, color: "#dc2626", bg: "#fee2e2" },
-                  { label: "Leave", value: monthlyDetail.leave, color: "#ca8a04", bg: "#fef9c3" },
-                  { label: "Holidays", value: monthlyDetail.holidays, color: "#9ca3af", bg: "#f3f4f6" },
+                  { label: "Present",    value: monthlyDetail.present,          color: "#16a34a", bg: "#dcfce7" },
+                  { label: "Absent",     value: monthlyDetail.absent,           color: "#dc2626", bg: "#fee2e2" },
+                  { label: "Holidays",   value: monthlyDetail.holidays,         color: "#9ca3af", bg: "#f3f4f6" },
                   { label: "Percentage", value: monthlyDetail.percentage + "%", color: "#7c3aed", bg: "#f5f3ff" },
                 ].map(item => (
                   <View key={item.label} style={[styles.monthlyCell, { backgroundColor: item.bg, borderColor: item.color + "40" }]}>
@@ -836,6 +949,14 @@ export default function AttendanceScreen() {
                 ))}
               </View>
 
+              {/* Trend line chart */}
+              <AttendanceTrendChart
+                calendarData={calendarData}
+                currentMonth={currentMonth}
+                currentYear={currentYear}
+              />
+
+              {/* Leave section */}
               {leaveRecords.length > 0 && (() => {
                 const activeLeaves = leaveRecords.filter(r => normalizeStatus(r.status) !== "Cancelled");
                 if (activeLeaves.length === 0) return null;
@@ -895,9 +1016,8 @@ export default function AttendanceScreen() {
           <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setActiveModal(null)} />
           <View style={styles.modalSheet}>
             <View style={styles.modalDragHandle} />
-            <Text style={styles.modalTitle}>{"🕐 Session Wise Attendance"}</Text>
-            <Text style={styles.modalSubtitle}>{MONTHS[currentMonth] + " " + currentYear}</Text>
-
+            <Text style={styles.modalTitle}>🕐 Session Wise Attendance</Text>
+            <Text style={styles.modalSubtitle}>{MONTHS[currentMonth]} {currentYear}</Text>
             {sessionData.length > 0 ? (
               <ScrollView style={{ width: "100%", marginTop: 10 }} showsVerticalScrollIndicator={false}>
                 {sessionData.map((item, i) => {
@@ -916,7 +1036,6 @@ export default function AttendanceScreen() {
             ) : (
               <Text style={{ color: "#888", marginTop: 20 }}>No session data available.</Text>
             )}
-
             <TouchableOpacity style={styles.closeBtn} onPress={() => setActiveModal(null)}>
               <Text style={styles.closeBtnText}>Close</Text>
             </TouchableOpacity>
@@ -942,7 +1061,6 @@ export default function AttendanceScreen() {
                 <Text style={styles.applyModalCloseTxt}>✕</Text>
               </TouchableOpacity>
             </View>
-
             <ScrollView showsVerticalScrollIndicator={false} style={{ width: "100%" }} keyboardShouldPersistTaps="handled">
               {studentId ? (
                 <View style={styles.studentChip}>
@@ -958,15 +1076,8 @@ export default function AttendanceScreen() {
                   <Text style={[styles.studentChipText, { color: "#DC2626" }]}>Student ID not found. Please re-login.</Text>
                 </View>
               )}
-
               <Text style={styles.sectionLabel}>📅 Select Dates</Text>
-              <CalendarPicker
-                fromDate={leaveFrom}
-                toDate={leaveTo}
-                onFromChange={setLeaveFrom}
-                onToChange={setLeaveTo}
-              />
-
+              <CalendarPicker fromDate={leaveFrom} toDate={leaveTo} onFromChange={setLeaveFrom} onToChange={setLeaveTo} />
               {leaveFrom && leaveTo && (
                 <View style={styles.dayCountPill}>
                   <Text style={styles.dayCountTxt}>
@@ -974,7 +1085,6 @@ export default function AttendanceScreen() {
                   </Text>
                 </View>
               )}
-
               <Text style={styles.sectionLabel}>✏️ Reason for Leave</Text>
               <TextInput
                 style={[styles.input, styles.inputMultiline]}
@@ -985,12 +1095,8 @@ export default function AttendanceScreen() {
                 multiline
                 numberOfLines={3}
               />
-
               <TouchableOpacity
-                style={[
-                  styles.submitLeaveBtn,
-                  (!leaveFrom || !leaveTo || !leaveReason.trim() || submitting) && styles.submitLeaveBtnDisabled,
-                ]}
+                style={[styles.submitLeaveBtn, (!leaveFrom || !leaveTo || !leaveReason.trim() || submitting) && styles.submitLeaveBtnDisabled]}
                 onPress={handleApplyLeave}
                 disabled={!leaveFrom || !leaveTo || !leaveReason.trim() || submitting}
                 activeOpacity={0.85}
@@ -1004,7 +1110,6 @@ export default function AttendanceScreen() {
                   <Text style={styles.submitLeaveBtnText}>Submit Application</Text>
                 )}
               </TouchableOpacity>
-
               <TouchableOpacity style={styles.closeBtn} onPress={() => setActiveModal(null)}>
                 <Text style={styles.closeBtnText}>Cancel</Text>
               </TouchableOpacity>
@@ -1018,35 +1123,22 @@ export default function AttendanceScreen() {
       <Modal visible={activeModal === "history"} animationType="slide" transparent onRequestClose={() => setActiveModal(null)}>
         <View style={styles.modalOverlay} pointerEvents="box-none">
           <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setActiveModal(null)} />
-
-          {/* Sheet */}
           <View style={styles.historySheet}>
             <View style={styles.modalDragHandle} />
-
-            {/* Header row */}
             <View style={styles.historyModalHeader}>
               <Text style={styles.historyModalTitle}>📋 Leave History</Text>
-              <TouchableOpacity
-                onPress={() => fetchLeaveHistory(studentId, authToken)}
-                style={styles.historyRefreshBtn}
-                activeOpacity={0.7}
-              >
+              <TouchableOpacity onPress={() => fetchLeaveHistory(studentId, authToken)} style={styles.historyRefreshBtn} activeOpacity={0.7}>
                 <Text style={styles.historyRefreshTxt}>↻ Refresh</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => setActiveModal(null)}
-                style={styles.applyModalClose}
-                activeOpacity={0.7}
-              >
+              <TouchableOpacity onPress={() => setActiveModal(null)} style={styles.applyModalClose} activeOpacity={0.7}>
                 <Text style={styles.applyModalCloseTxt}>✕</Text>
               </TouchableOpacity>
             </View>
 
-            {/* Summary pills — only when records exist */}
             {leaveRecords.length > 0 && (
               <View style={styles.historySummaryRow}>
                 {[
-                  { label: "Total",     count: leaveRecords.length,                                                                          color: PRIMARY,   bg: "#EFF6FF" },
+                  { label: "Total",     count: leaveRecords.length, color: PRIMARY, bg: "#EFF6FF" },
                   { label: "Pending",   count: leaveRecords.filter(r => normalizeStatus(r.status) !== "Cancelled").length, color: "#ca8a04", bg: "#fef9c3" },
                   { label: "Cancelled", count: leaveRecords.filter(r => normalizeStatus(r.status) === "Cancelled").length, color: "#6b7280", bg: "#f3f4f6" },
                 ].map(s => (
@@ -1058,7 +1150,6 @@ export default function AttendanceScreen() {
               </View>
             )}
 
-            {/* ── Body: loading / empty / list ── */}
             {historyLoading ? (
               <View style={styles.historyLoadingWrap}>
                 <ActivityIndicator size="large" color={PRIMARY} />
@@ -1071,24 +1162,15 @@ export default function AttendanceScreen() {
                 <Text style={styles.historyEmptySubtitle}>Your submitted leave requests will appear here</Text>
               </View>
             ) : (
-              /* flex: 1 here makes the ScrollView fill remaining space between header+pills and close button */
-              <ScrollView
-                style={styles.historyScroll}
-                showsVerticalScrollIndicator={false}
-                keyboardShouldPersistTaps="handled"
-                contentContainerStyle={{ paddingBottom: 12 }}
-              >
+              <ScrollView style={styles.historyScroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 12 }}>
                 {leaveRecords.map((item) => {
                   const s = getLeaveStatusStyle(item.status);
                   const days = datesBetween(item.from_date, item.to_date).length;
                   const isCancellingThis = cancelling === item.id;
-
                   return (
                     <View key={item.id} style={styles.historyCard}>
                       <View style={[styles.historyCardAccent, { backgroundColor: s.text }]} />
                       <View style={{ flex: 1, paddingLeft: 12 }}>
-
-                        {/* Date row */}
                         <View style={styles.historyCardDateRow}>
                           <Text style={styles.historyCardDates}>
                             {fmtDisplay(item.from_date)}
@@ -1098,24 +1180,16 @@ export default function AttendanceScreen() {
                             <Text style={styles.historyCardDaysTxt}>{days}d</Text>
                           </View>
                         </View>
-
-                        {/* Reason */}
                         <Text style={styles.historyCardReason}>{item.reason}</Text>
-
-                        {/* Meta: applied date + status badge */}
                         <View style={styles.historyCardMeta}>
                           <Text style={styles.historyCardApplied}>
-                            Applied {new Date(item.applied_at).toLocaleDateString("en-IN", {
-                              day: "2-digit", month: "short", year: "numeric",
-                            })}
+                            Applied {new Date(item.applied_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
                           </Text>
                           <View style={[styles.historyCardStatus, { backgroundColor: s.bg }]}>
                             <Text style={styles.historyCardStatusIcon}>{s.icon}</Text>
                             <Text style={[styles.historyCardStatusTxt, { color: s.text }]}>{item.status}</Text>
                           </View>
                         </View>
-
-                        {/* Cancel button — show for any non-cancelled leave */}
                         {normalizeStatus(item.status) !== "Cancelled" && (
                           <TouchableOpacity
                             style={styles.cancelLeaveBtn}
@@ -1130,8 +1204,6 @@ export default function AttendanceScreen() {
                             }
                           </TouchableOpacity>
                         )}
-
-                        {/* Teacher comments */}
                         {item.comments && item.comments.length > 0 && (
                           <View style={styles.commentsWrap}>
                             <View style={styles.commentsDivider} />
@@ -1139,9 +1211,7 @@ export default function AttendanceScreen() {
                               <View key={c.id} style={styles.commentBubble}>
                                 <View style={styles.commentHeader}>
                                   <View style={styles.commentAvatarWrap}>
-                                    <Text style={styles.commentAvatarTxt}>
-                                      {c.comment_by.charAt(0).toUpperCase()}
-                                    </Text>
+                                    <Text style={styles.commentAvatarTxt}>{c.comment_by.charAt(0).toUpperCase()}</Text>
                                   </View>
                                   <View style={{ flex: 1 }}>
                                     <Text style={styles.commentBy}>{c.comment_by}</Text>
@@ -1165,7 +1235,6 @@ export default function AttendanceScreen() {
               </ScrollView>
             )}
 
-            {/* Close button always at bottom */}
             <TouchableOpacity style={styles.historyCloseBtn} onPress={() => setActiveModal(null)} activeOpacity={0.7}>
               <Text style={styles.closeBtnText}>Close</Text>
             </TouchableOpacity>
@@ -1179,19 +1248,7 @@ export default function AttendanceScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#F5F7FA" },
 
-  // ── Header ──
-  headerTop: {
-    paddingTop: 50,
-    paddingBottom: 20,
-    paddingHorizontal: 16,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-    elevation: 4,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-  },
+  headerTop: { paddingTop: 50, paddingBottom: 20, paddingHorizontal: 16, borderBottomLeftRadius: 24, borderBottomRightRadius: 24, elevation: 4, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8 },
   headerTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", width: "100%" },
   backBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center", borderRadius: 20, backgroundColor: "rgba(255,255,255,0.15)" },
   backArrow: { color: "#fff", fontSize: 22, fontWeight: "600" },
@@ -1205,13 +1262,11 @@ const styles = StyleSheet.create({
   logoutBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center", borderRadius: 20, backgroundColor: "rgba(255,255,255,0.15)" },
   logoutIcon: { color: "#fff", fontSize: 20, fontWeight: "600" },
 
-  // ── Month nav ──
   monthNav: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingVertical: 12 },
   navBtn: { padding: 8 },
   navArrow: { fontSize: 22, color: "#0047AB", fontWeight: "800" },
   monthLabel: { fontSize: 18, fontWeight: "700", color: "#1A1A2E" },
 
-  // ── Calendar ──
   calendarCard: { backgroundColor: "#fff", marginHorizontal: 10, borderRadius: 16, borderWidth: 1, borderColor: "#E0E6F0", padding: 10 },
   calendarGrid: { flexDirection: "row", flexWrap: "wrap" },
   dayHeader: { width: "14.28%", textAlign: "center", fontSize: 11, fontWeight: "700", color: "#0047AB", paddingBottom: 6 },
@@ -1222,7 +1277,6 @@ const styles = StyleSheet.create({
   tappedCell: { borderWidth: 2.5, borderColor: "#7c3aed" },
   leaveDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: "#ca8a04", position: "absolute", bottom: 3 },
 
-  // ── Day info panel ──
   dayInfoPanel: { marginTop: 8, backgroundColor: "#F8FAFF", borderRadius: 10, borderWidth: 1, borderColor: "#BFDBFE", padding: 8 },
   dayInfoHeader: { flexDirection: "row", alignItems: "center", marginBottom: 4, gap: 6 },
   dayInfoDate: { fontSize: 12, fontWeight: "700", color: "#1A1A2E", flex: 1 },
@@ -1237,7 +1291,6 @@ const styles = StyleSheet.create({
   dayInfoMetaTxt: { fontSize: 10, color: "#888", flex: 1 },
   dayInfoEmpty: { fontSize: 11, color: "#888", fontStyle: "italic" },
 
-  // ── Legend & progress ──
   legendRow: { flexDirection: "row", alignItems: "center", marginHorizontal: 16, marginTop: 6, gap: 6 },
   leaveDotLegend: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#ca8a04" },
   legendTxt: { fontSize: 11, color: "#888" },
@@ -1247,42 +1300,29 @@ const styles = StyleSheet.create({
   progressFill: { height: 8, backgroundColor: "#16a34a", borderRadius: 4 },
   percentageValue: { fontSize: 13, fontWeight: "800", color: "#16a34a", width: 44, textAlign: "right" },
 
-  // ── Action grid ──
   actionsGrid: { flexDirection: "row", flexWrap: "wrap", marginHorizontal: 12, marginTop: 14, gap: 10 },
   actionCard: { width: "47.5%", borderRadius: 14, paddingVertical: 18, alignItems: "center", justifyContent: "center" },
   actionCardIcon: { fontSize: 26, marginBottom: 6 },
   actionCardText: { fontSize: 13, fontWeight: "700", color: "#fff", textAlign: "center", lineHeight: 18 },
 
-  // ── Modal base (bottom sheet style) ──
   modalOverlay: { flex: 1, justifyContent: "flex-end" },
   modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.5)" },
-  modalSheet: {
-    backgroundColor: "#fff",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 20,
-    paddingBottom: 34,
-    maxHeight: "85%",
-    alignItems: "center",
-  },
+  modalSheet: { backgroundColor: "#fff", borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 34, maxHeight: "85%", alignItems: "center" },
   modalDragHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: "#E0E6F0", marginBottom: 16 },
   modalTitle: { fontSize: 18, fontWeight: "800", color: "#0047AB", marginBottom: 4 },
   modalSubtitle: { fontSize: 13, color: "#888", marginBottom: 12 },
 
-  // ── Monthly modal ──
-  monthlyGrid: { flexDirection: "row", flexWrap: "wrap", width: "100%", gap: 10, marginBottom: 16 },
-  monthlyCell: { width: "30%", backgroundColor: "#F5F7FA", borderRadius: 12, paddingVertical: 14, alignItems: "center", borderWidth: 1, borderColor: "#E0E6F0" },
+  monthlyGrid: { flexDirection: "row", flexWrap: "wrap", width: "100%", gap: 10, marginBottom: 14 },
+  monthlyCell: { width: "47%", backgroundColor: "#F5F7FA", borderRadius: 12, paddingVertical: 14, alignItems: "center", borderWidth: 1, borderColor: "#E0E6F0" },
   monthlyCellNum: { fontSize: 22, fontWeight: "800" },
   monthlyCellLabel: { fontSize: 11, color: "#888", fontWeight: "600", marginTop: 2 },
 
-  // ── Session modal ──
   sessionRow: { flexDirection: "row", alignItems: "center", paddingVertical: 10, borderBottomWidth: 0.5, borderBottomColor: "#E0E6F0", gap: 10 },
   sessionDate: { fontSize: 12, color: "#555", flex: 1 },
   sessionName: { fontSize: 13, fontWeight: "600", color: "#1A1A2E", flex: 1 },
   sessionBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, borderWidth: 1 },
   sessionBadgeText: { fontSize: 12, fontWeight: "700" },
 
-  // ── Apply leave modal ──
   applyModalHeader: { flexDirection: "row", alignItems: "center", width: "100%", marginBottom: 16, gap: 10 },
   applyModalIconWrap: { width: 44, height: 44, borderRadius: 12, backgroundColor: "#EFF6FF", alignItems: "center", justifyContent: "center" },
   applyModalIcon: { fontSize: 22 },
@@ -1304,41 +1344,15 @@ const styles = StyleSheet.create({
   submitLeaveBtnDisabled: { backgroundColor: "#94a3b8", opacity: 0.7 },
   submitLeaveBtnText: { color: "#fff", fontSize: 15, fontWeight: "700" },
 
-  // ── Close btn ──
   closeBtn: { marginTop: 12, paddingVertical: 8, alignItems: "center" },
   closeBtnText: { fontSize: 14, color: "#888", fontWeight: "600" },
 
-  // ── History sheet (dedicated — flex column so ScrollView can grow) ──
-  historySheet: {
-    backgroundColor: "#fff",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 34,
-    height: "88%",
-    flexDirection: "column",
-  },
-  historyScroll: {
-    flex: 1,
-    width: "100%",
-    marginTop: 6,
-  },
-  historyLoadingWrap: {
-    flex: 1,
-    alignItems: "center" as const,
-    justifyContent: "center" as const,
-  },
+  historySheet: { backgroundColor: "#fff", borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 34, height: "88%", flexDirection: "column" },
+  historyScroll: { flex: 1, width: "100%", marginTop: 6 },
+  historyLoadingWrap: { flex: 1, alignItems: "center" as const, justifyContent: "center" as const },
   historyLoadingTxt: { fontSize: 13, color: "#888", marginTop: 8 },
-  historyCloseBtn: {
-    paddingVertical: 12,
-    alignItems: "center" as const,
-    borderTopWidth: 1,
-    borderTopColor: "#F0F0F0",
-    marginTop: 4,
-  },
+  historyCloseBtn: { paddingVertical: 12, alignItems: "center" as const, borderTopWidth: 1, borderTopColor: "#F0F0F0", marginTop: 4 },
 
-  // ── Leave History modal ──
   historyModalHeader: { flexDirection: "row", alignItems: "center", width: "100%", marginBottom: 12, gap: 6 },
   historyModalTitle: { fontSize: 17, fontWeight: "800", color: "#1A1A2E", flex: 1 },
   historyRefreshBtn: { backgroundColor: "#EFF6FF", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: "#BFDBFE" },
@@ -1352,7 +1366,6 @@ const styles = StyleSheet.create({
   historyEmptyTitle: { fontSize: 15, fontWeight: "700", color: "#555", marginBottom: 4 },
   historyEmptySubtitle: { fontSize: 12, color: "#aaa", textAlign: "center" },
 
-  // ── History card ──
   historyCard: { flexDirection: "row", backgroundColor: "#FAFBFF", borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: "#E0E6F0", overflow: "hidden", paddingVertical: 12, paddingRight: 12 },
   historyCardAccent: { width: 4, borderRadius: 2, alignSelf: "stretch" },
   historyCardDateRow: { flexDirection: "row", alignItems: "center", marginBottom: 4, gap: 6 },
@@ -1366,28 +1379,9 @@ const styles = StyleSheet.create({
   historyCardStatusIcon: { fontSize: 11 },
   historyCardStatusTxt: { fontSize: 11, fontWeight: "700" },
 
-  // ── Cancel button ──
-  cancelLeaveBtn: {
-    marginTop: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 8,
-    borderWidth: 1.5,
-    borderColor: "#DC2626",
-    backgroundColor: "#FEF2F2",
-    alignSelf: "flex-start",
-    alignItems: "center",
-    justifyContent: "center",
-    minWidth: 150,
-    minHeight: 36,
-  },
-  cancelLeaveBtnText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#DC2626",
-  },
+  cancelLeaveBtn: { marginTop: 10, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8, borderWidth: 1.5, borderColor: "#DC2626", backgroundColor: "#FEF2F2", alignSelf: "flex-start", alignItems: "center", justifyContent: "center", minWidth: 150, minHeight: 36 },
+  cancelLeaveBtnText: { fontSize: 12, fontWeight: "700", color: "#DC2626" },
 
-  // ── Teacher comments ──
   commentsWrap: { marginTop: 10 },
   commentsDivider: { height: 1, backgroundColor: "#E0E6F0", marginBottom: 8 },
   commentBubble: { backgroundColor: "#F0F4FF", borderRadius: 10, padding: 10, marginBottom: 6, borderWidth: 1, borderColor: "#DBEAFE" },
@@ -1399,7 +1393,6 @@ const styles = StyleSheet.create({
   commentIcon: { fontSize: 14 },
   commentText: { fontSize: 13, color: "#374151", lineHeight: 19, fontStyle: "italic" },
 
-  // ── Monthly leave section ──
   monthlyLeaveSection: { width: "100%", marginTop: 4, marginBottom: 4 },
   monthlyLeaveSectionHeader: { flexDirection: "row", alignItems: "center", marginBottom: 8, gap: 8 },
   monthlyLeaveSectionTitle: { fontSize: 13, fontWeight: "800", color: "#1A1A2E", flex: 1 },
