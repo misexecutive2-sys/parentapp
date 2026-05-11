@@ -15,6 +15,7 @@ import { router, useLocalSearchParams, useFocusEffect } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { RefreshControl } from "react-native";
 
 import {
   aggregateAndStoreNotifications,
@@ -47,6 +48,7 @@ export default function DashboardScreen() {
   const [selectedYearId, setSelectedYearId] = useState<number | null>(null);
   const [sidebarOpen,    setSidebarOpen]    = useState(false);
   const [unreadCount,    setUnreadCount]    = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     fetchYears();
@@ -124,6 +126,13 @@ export default function DashboardScreen() {
     ]);
   };
 
+  const onRefresh = async () => {
+  setRefreshing(true);
+  await fetchAndCountNotifications();
+  await fetchYears();
+  setRefreshing(false);
+};
+
   const handleSwitchChild = () => {
     setSidebarOpen(false);
     router.replace("/addchild");
@@ -165,84 +174,98 @@ export default function DashboardScreen() {
       <StatusBar barStyle="light-content" backgroundColor={PRIMARY} />
 
       {/* ── HEADER ─────────────────────────────────────────── */}
-      <View style={styles.header}>
+<View style={styles.header}>
 
-        {/* Top bar */}
-        <View style={styles.topBar}>
-          <View style={styles.topBarLeft}>
-            <Text style={styles.schoolLabel}>School Aid</Text>
-            <Text style={styles.subLabel}>Parent Portal</Text>
-          </View>
+  {/* Top bar */}
+  <View style={styles.topBar}>
 
-          <View style={{ flex: 1 }} />
+    {/* Left side - Menu + Year */}
+    <View style={styles.topBarLeft}>
+      <TouchableOpacity
+        style={styles.menuBtn}
+        onPress={() => setSidebarOpen(true)}
+        activeOpacity={0.8}
+      >
+        <Ionicons name="menu-outline" size={22} color="#fff" />
+      </TouchableOpacity>
 
-          {selectedYearLabel && (
-            <View style={styles.yearPill}>
-              <Ionicons name="calendar-outline" size={10} color="rgba(255,255,255,0.9)" />
-              <Text style={styles.yearPillText}>{selectedYearLabel}</Text>
-            </View>
-          )}
-
-          <TouchableOpacity
-            style={styles.menuBtn}
-            onPress={() => setSidebarOpen(true)}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="menu-outline" size={22} color="#fff" />
-          </TouchableOpacity>
+      {selectedYearLabel && (
+        <View style={styles.yearPill}>
+          <Ionicons name="calendar-outline" size={10} color="rgba(255,255,255,0.9)" />
+          <Text style={styles.yearPillText}>{selectedYearLabel}</Text>
         </View>
+      )}
+    </View>
 
-        {/* Child card */}
-        <View style={styles.childCard}>
-          <View style={styles.childAvatarWrap}>
-            <View style={styles.childAvatar}>
-              <Text style={styles.childAvatarText}>{getInitials(childName ?? "")}</Text>
-            </View>
-            <View style={styles.onlineDot} />
-          </View>
+    {/* Right side - School Aid */}
+    <View style={styles.topBarRight}>
+      <Text style={styles.schoolLabel}>School Aid</Text>
+      <Text style={styles.subLabel}>Parent Portal</Text>
+    </View>
 
-          <View style={styles.childInfo}>
-            <Text style={styles.greetingText}>{getGreeting()} 👋</Text>
-            <Text style={styles.childName} numberOfLines={1} ellipsizeMode="tail">
-              {childName}
-            </Text>
-            <View style={styles.badgeRow}>
-              <View style={styles.infoBadge}>
-                <Ionicons name="school-outline" size={10} color={PRIMARY} />
-                <Text style={styles.infoBadgeText}>Class {classname}</Text>
-              </View>
-              <Text style={styles.badgeDot}>·</Text>
-              <View style={styles.infoBadge}>
-                <Ionicons name="layers-outline" size={10} color={PRIMARY} />
-                <Text style={styles.infoBadgeText}>Sec {sectionname}</Text>
-              </View>
-            </View>
-          </View>
+  </View>
 
-          {/* Bell */}
-          <TouchableOpacity
-            style={styles.notifBtn}
-            onPress={handleBellPress}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="notifications-outline" size={18} color={PRIMARY} />
-            {unreadCount > 0 && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>
-                  {unreadCount > 99 ? "99+" : unreadCount}
-                </Text>
-              </View>
-            )}
-          </TouchableOpacity>
+  {/* Child card */}
+  <View style={styles.childCard}>
+    <View style={styles.childAvatarWrap}>
+      <View style={styles.childAvatar}>
+        <Text style={styles.childAvatarText}>{getInitials(childName ?? "")}</Text>
+      </View>
+      <View style={styles.onlineDot} />
+    </View>
+
+    <View style={styles.childInfo}>
+      <Text style={styles.greetingText}>{getGreeting()} 👋</Text>
+      <Text style={styles.childName} numberOfLines={1} ellipsizeMode="tail">
+        {childName}
+      </Text>
+      <View style={styles.badgeRow}>
+        <View style={styles.infoBadge}>
+          <Ionicons name="school-outline" size={10} color={PRIMARY} />
+          <Text style={styles.infoBadgeText}>Class {classname}</Text>
+        </View>
+        <Text style={styles.badgeDot}>·</Text>
+        <View style={styles.infoBadge}>
+          <Ionicons name="layers-outline" size={10} color={PRIMARY} />
+          <Text style={styles.infoBadgeText}>Sec {sectionname}</Text>
         </View>
       </View>
+    </View>
+
+    {/* Bell */}
+    <TouchableOpacity
+      style={styles.notifBtn}
+      onPress={handleBellPress}
+      activeOpacity={0.8}
+    >
+      <Ionicons name="notifications-outline" size={18} color={PRIMARY} />
+      {unreadCount > 0 && (
+        <View style={styles.badge}>
+          <Text style={styles.badgeText}>
+            {unreadCount > 99 ? "99+" : unreadCount}
+          </Text>
+        </View>
+      )}
+    </TouchableOpacity>
+  </View>
+
+</View>
 
       {/* ── MODULE LIST ────────────────────────────────────── */}
-      <ScrollView
-        contentContainerStyle={styles.grid}
-        showsVerticalScrollIndicator={false}
-        style={styles.scrollBg}
-      >
+ <ScrollView
+  contentContainerStyle={styles.grid}
+  showsVerticalScrollIndicator={false}
+  style={styles.scrollBg}
+  refreshControl={
+    <RefreshControl
+      refreshing={refreshing}
+      onRefresh={onRefresh}
+      colors={[PRIMARY]}        // Android spinner color
+      tintColor={PRIMARY}       // iOS spinner color
+      progressBackgroundColor="#fff"
+    />
+  }
+>
         <Text style={styles.gridLabel}>Quick Access</Text>
         <View style={styles.gridWrap}>
           {modules.map((mod, idx) => (
@@ -266,120 +289,125 @@ export default function DashboardScreen() {
       </ScrollView>
 
       {/* ── SIDEBAR ────────────────────────────────────────── */}
-      <Modal
-        visible={sidebarOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setSidebarOpen(false)}
-      >
-        <View style={styles.overlay}>
+<Modal
+  visible={sidebarOpen}
+  transparent
+  animationType="slide"
+  onRequestClose={() => setSidebarOpen(false)}
+>
+  <View style={styles.overlay}>
+
+    {/* Sidebar - LEFT */}
+    <View style={styles.sidebar}>
+
+      {/* Sidebar header */}
+      <View style={styles.sbHeader}>
+        <View style={styles.sbLogoRow}>
+          <View style={styles.sbLogoBox}>
+            <Image source={require("../../assets/logo.png")} style={styles.sbLogo} />
+          </View>
+          <Text style={styles.sbBrandName}>School Aid</Text>
           <TouchableOpacity
-            style={styles.overlayBg}
+            style={styles.sbClose}
             onPress={() => setSidebarOpen(false)}
-            activeOpacity={1}
-          />
-          <View style={styles.sidebar}>
+          >
+            <Ionicons name="close-outline" size={20} color="rgba(255,255,255,0.85)" />
+          </TouchableOpacity>
+        </View>
 
-            {/* Sidebar header */}
-            <View style={styles.sbHeader}>
-              <View style={styles.sbLogoRow}>
-                <View style={styles.sbLogoBox}>
-                  <Image source={require("../../assets/logo.png")} style={styles.sbLogo} />
-                </View>
-                <Text style={styles.sbBrandName}>School Aid</Text>
-                <TouchableOpacity
-                  style={styles.sbClose}
-                  onPress={() => setSidebarOpen(false)}
-                >
-                  <Ionicons name="close-outline" size={20} color="rgba(255,255,255,0.85)" />
-                </TouchableOpacity>
-              </View>
+        <View style={styles.sbDivider} />
 
-              <View style={styles.sbDivider} />
-
-              <View style={styles.sbChildRow}>
-                <View style={styles.sbAvatarCircle}>
-                  <Text style={styles.sbAvatarText}>{getInitials(childName ?? "")}</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.sbName} numberOfLines={1}>{childName}</Text>
-                  <Text style={styles.sbMeta}>Class {classname} · Sec {sectionname}</Text>
-                </View>
-              </View>
-            </View>
-
-            <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
-
-              {/* Year picker */}
-              <View style={styles.sbSection}>
-                <Text style={styles.sbSectionLabel}>ACADEMIC YEAR</Text>
-                {years.length > 0 && (
-                  <View style={styles.sbPickerBox}>
-                    <Picker
-                      selectedValue={selectedYearId}
-                      onValueChange={(val) => handleYearChange(val)}
-                      style={styles.sbPicker}
-                      dropdownIconColor={PRIMARY}
-                      mode="dropdown"
-                    >
-                      {years.map((yr) => (
-                        <Picker.Item
-                          key={yr.id}
-                          label={yr.year ?? String(yr.id)}
-                          value={yr.id}
-                          color={PRIMARY}
-                        />
-                      ))}
-                    </Picker>
-                  </View>
-                )}
-              </View>
-
-              {/* Quick links */}
-              <View style={styles.sbSection}>
-                <Text style={styles.sbSectionLabel}>QUICK LINKS</Text>
-
-                <TouchableOpacity
-                  style={styles.sbItem}
-                  onPress={() => { setSidebarOpen(false); navigateTo("/Dashboard/message"); }}
-                >
-                  <View style={[styles.sbItemIcon, { backgroundColor: "#E3F2FD" }]}>
-                    <Ionicons name="chatbubble-ellipses-outline" size={16} color="#1565C0" />
-                  </View>
-                  <Text style={styles.sbItemLabel}>Message Teacher</Text>
-                  <Ionicons name="chevron-forward-outline" size={15} color="#ccc" />
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.sbItem}
-                  onPress={() => { setSidebarOpen(false); router.push("/Dashboard/setting"); }}
-                >
-                  <View style={[styles.sbItemIcon, { backgroundColor: "#F3E5F5" }]}>
-                    <Ionicons name="settings-outline" size={16} color="#6A1B9A" />
-                  </View>
-                  <Text style={styles.sbItemLabel}>Settings</Text>
-                  <Ionicons name="chevron-forward-outline" size={15} color="#ccc" />
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.sbItem} onPress={handleSwitchChild}>
-                  <View style={[styles.sbItemIcon, { backgroundColor: "#E8F5E9" }]}>
-                    <Ionicons name="people-outline" size={16} color="#2E7D32" />
-                  </View>
-                  <Text style={styles.sbItemLabel}>Switch Child</Text>
-                  <Ionicons name="chevron-forward-outline" size={15} color="#ccc" />
-                </TouchableOpacity>
-              </View>
-
-              {/* Logout */}
-              <TouchableOpacity style={styles.sbLogout} onPress={handleLogout}>
-                <Ionicons name="log-out-outline" size={18} color="#C62828" />
-                <Text style={styles.sbLogoutText}>Logout</Text>
-              </TouchableOpacity>
-
-            </ScrollView>
+        <View style={styles.sbChildRow}>
+          <View style={styles.sbAvatarCircle}>
+            <Text style={styles.sbAvatarText}>{getInitials(childName ?? "")}</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.sbName} numberOfLines={1}>{childName}</Text>
+            <Text style={styles.sbMeta}>Class {classname} · Sec {sectionname}</Text>
           </View>
         </View>
-      </Modal>
+      </View>
+
+      <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+
+        {/* Year picker */}
+        <View style={styles.sbSection}>
+          <Text style={styles.sbSectionLabel}>ACADEMIC YEAR</Text>
+          {years.length > 0 && (
+            <View style={styles.sbPickerBox}>
+              <Picker
+                selectedValue={selectedYearId}
+                onValueChange={(val) => handleYearChange(val)}
+                style={styles.sbPicker}
+                dropdownIconColor={PRIMARY}
+                mode="dropdown"
+              >
+                {years.map((yr) => (
+                  <Picker.Item
+                    key={yr.id}
+                    label={yr.year ?? String(yr.id)}
+                    value={yr.id}
+                    color={PRIMARY}
+                  />
+                ))}
+              </Picker>
+            </View>
+          )}
+        </View>
+
+        {/* Quick links */}
+        <View style={styles.sbSection}>
+          <Text style={styles.sbSectionLabel}>QUICK LINKS</Text>
+
+          <TouchableOpacity
+            style={styles.sbItem}
+            onPress={() => { setSidebarOpen(false); navigateTo("/Dashboard/message"); }}
+          >
+            <View style={[styles.sbItemIcon, { backgroundColor: "#E3F2FD" }]}>
+              <Ionicons name="chatbubble-ellipses-outline" size={16} color="#1565C0" />
+            </View>
+            <Text style={styles.sbItemLabel}>Message Teacher</Text>
+            <Ionicons name="chevron-forward-outline" size={15} color="#ccc" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.sbItem}
+            onPress={() => { setSidebarOpen(false); router.push("/Dashboard/setting"); }}
+          >
+            <View style={[styles.sbItemIcon, { backgroundColor: "#F3E5F5" }]}>
+              <Ionicons name="settings-outline" size={16} color="#6A1B9A" />
+            </View>
+            <Text style={styles.sbItemLabel}>Settings</Text>
+            <Ionicons name="chevron-forward-outline" size={15} color="#ccc" />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.sbItem} onPress={handleSwitchChild}>
+            <View style={[styles.sbItemIcon, { backgroundColor: "#E8F5E9" }]}>
+              <Ionicons name="people-outline" size={16} color="#2E7D32" />
+            </View>
+            <Text style={styles.sbItemLabel}>Switch Child</Text>
+            <Ionicons name="chevron-forward-outline" size={15} color="#ccc" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Logout */}
+        <TouchableOpacity style={styles.sbLogout} onPress={handleLogout}>
+          <Ionicons name="log-out-outline" size={18} color="#C62828" />
+          <Text style={styles.sbLogoutText}>Logout</Text>
+        </TouchableOpacity>
+
+      </ScrollView>
+    </View>
+
+    {/* Tap to close - RIGHT */}
+    <TouchableOpacity
+      style={styles.overlayBg}
+      onPress={() => setSidebarOpen(false)}
+      activeOpacity={1}
+    />
+
+  </View>
+</Modal>
     </SafeAreaView>
   );
 }
@@ -391,8 +419,9 @@ const styles = StyleSheet.create({
 
   // Header
   header:          { backgroundColor: PRIMARY, paddingBottom: 16, borderBottomLeftRadius: 28, borderBottomRightRadius: 28, elevation: 8, shadowColor: PRIMARY, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 12 },
-  topBar:          { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8 },
-  topBarLeft:      { gap: 1 },
+topBar:      { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8 },
+topBarLeft:  { flexDirection: "row", alignItems: "center", gap: 8 },
+topBarRight: { alignItems: "flex-end" },
   schoolLabel:     { fontSize: 16, fontWeight: "800", color: "#fff", letterSpacing: 0.3 },
   subLabel:        { fontSize: 10, color: "rgba(255,255,255,0.7)", fontWeight: "500" },
   yearPill:        { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "rgba(255,255,255,0.15)", borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4, marginRight: 8 },
@@ -427,9 +456,24 @@ const styles = StyleSheet.create({
   cardArrow:       { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center" },
 
   // Sidebar
-  overlay:         { flex: 1, flexDirection: "row" },
-  overlayBg:       { flex: 1, backgroundColor: "rgba(0,0,0,0.45)" },
-  sidebar:         { width: 290, backgroundColor: "#fff", height: "100%" },
+overlay: {
+  flex: 1,
+  flexDirection: "row",
+  backgroundColor: "rgba(0,0,0,0.4)",
+},
+sidebar: {
+  width: 300,
+  height: "100%",
+  backgroundColor: "#fff",
+  shadowColor: "#000",
+  shadowOffset: { width: 2, height: 0 },
+  shadowOpacity: 0.2,
+  shadowRadius: 12,
+  elevation: 15,
+},
+overlayBg: {
+  flex: 1,  // dark area on the right, tap to close
+},
   sbHeader:        { backgroundColor: PRIMARY, paddingTop: 50, paddingBottom: 20, paddingHorizontal: 16 },
   sbLogoRow:       { flexDirection: "row", alignItems: "center", gap: 10 },
   sbLogoBox:       { width: 36, height: 36, borderRadius: 10, backgroundColor: "rgba(255,255,255,0.2)", alignItems: "center", justifyContent: "center", overflow: "hidden" },
@@ -451,4 +495,5 @@ const styles = StyleSheet.create({
   sbItemLabel:     { flex: 1, fontSize: 14, fontWeight: "600", color: "#374151" },
   sbLogout:        { flexDirection: "row", alignItems: "center", gap: 10, marginHorizontal: 16, marginTop: 24, marginBottom: 32, backgroundColor: "#FEE2E2", borderRadius: 14, paddingVertical: 14, paddingHorizontal: 16 },
   sbLogoutText:    { fontSize: 14, fontWeight: "800", color: "#C62828" },
+
 });

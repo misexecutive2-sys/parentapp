@@ -387,12 +387,12 @@ const ConsolidatedResults = ({ data }: { data: any }) => {
   return (
     <View>
       <View style={styles.pillRow}>
-        <View style={[styles.pill, { backgroundColor: "#EFF6FF" }]}>
+        {/* <View style={[styles.pill, { backgroundColor: "#EFF6FF" }]}>
           <Text style={[styles.pillValue, { color: "#0047AB" }]}>
             {summary?.consolidatedPercentage?.toFixed(1)}%
           </Text>
           <Text style={styles.pillLabel}>Overall</Text>
-        </View>
+        </View> */}
         <View
           style={[
             styles.pill,
@@ -409,12 +409,12 @@ const ConsolidatedResults = ({ data }: { data: any }) => {
           </Text>
           <Text style={styles.pillLabel}>Grade</Text>
         </View>
-        <View style={[styles.pill, { backgroundColor: "#F0FDF4" }]}>
+        {/* <View style={[styles.pill, { backgroundColor: "#F0FDF4" }]}>
           <Text style={[styles.pillValue, { color: "#16a34a" }]}>
             #{summary?.overallRank}
           </Text>
           <Text style={styles.pillLabel}>Rank</Text>
-        </View>
+        </View> */}
       </View>
 
       {summary?.examBreakdown?.length > 0 && (
