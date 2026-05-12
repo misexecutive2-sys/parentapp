@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  Alert, ActivityIndicator, Modal, TextInput,
+  Alert, ActivityIndicator, Modal, TextInput, RefreshControl
 } from "react-native";
 import Svg, { Path, Circle, Defs, LinearGradient, Stop } from "react-native-svg";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -519,7 +519,7 @@ export default function AttendanceScreen() {
     try {
       const res = await fetch(`${API_BASE}/api/leaves/student?student_id=${sid}`, {
         method: "GET",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, "x-academic-year-id": await AsyncStorage.getItem("selectedYearId") ?? "16" },
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
@@ -602,7 +602,7 @@ export default function AttendanceScreen() {
     try {
       const response = await fetch(`${API_BASE}/api/leaves/apply`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` , "x-academic-year-id": await AsyncStorage.getItem("selectedYearId") ?? "16"  },
         body: JSON.stringify({
           student_id: Number(studentId),
           from_date: leaveFrom,
@@ -638,7 +638,7 @@ export default function AttendanceScreen() {
           try {
             const response = await fetch(`${API_BASE}/api/leaves/status`, {
               method: "PATCH",
-              headers: { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` },
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${authToken}`, "x-academic-year-id": await AsyncStorage.getItem("selectedYearId") ?? "16" },
               body: JSON.stringify({ leave_id: Number(leaveId), status: "Cancelled" }),
             });
             const result = await response.json();
@@ -864,6 +864,16 @@ export default function AttendanceScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+        //
+        {/* style={{ flex: 1 }} */}
+          refreshControl={
+            <RefreshControl
+              refreshing={loading}          // your loading state
+              onRefresh={fetchCalendar}     // function to call when pulled down
+              colors={["#0047AB"]}          // spinner color (Android)
+              tintColor="#0047AB"           // spinner color (iOS)
+            />
+          }
         {/* Month nav */}
         <View style={styles.monthNav}>
           <TouchableOpacity onPress={prevMonth} style={styles.navBtn}><Text style={styles.navArrow}>{"<<"}</Text></TouchableOpacity>

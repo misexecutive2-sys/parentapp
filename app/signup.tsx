@@ -428,7 +428,7 @@ export default function SignupScreen() {
     try {
       const res = await fetch(`${API_URL}/api/create-account`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" , "x-academic-year-id": await AsyncStorage.getItem("selectedYearId") ?? "16" },
         body: JSON.stringify({ 
         mobile: `+91${mobile}`,  // ← add this
         password, 

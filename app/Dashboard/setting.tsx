@@ -180,7 +180,7 @@ These Terms and Conditions will be applicable to YOU when YOU either procure the
         </View>
 
         {/* App version */}
-        <Text style={styles.version}>SchoolAid v1.0.0</Text>
+        {/* <Text style={styles.version}>SchoolAid v1.0.0</Text> */}
 
       </ScrollView>
     </SafeAreaView>

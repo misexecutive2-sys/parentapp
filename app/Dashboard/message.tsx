@@ -2316,6 +2316,7 @@ import {
   Clipboard,
   Dimensions,
   StatusBar,
+  RefreshControl,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
@@ -2325,8 +2326,6 @@ import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
 import { Audio } from "expo-av";
 import * as FileSystem from "expo-file-system/legacy";
-import * as WebBrowser from "expo-web-browser";
-import * as IntentLauncher from "expo-intent-launcher"; // ✅ Android: open local files via content URI
 import {
   CameraView,
   useCameraPermissions,
@@ -2334,10 +2333,8 @@ import {
 } from "expo-camera";
 import { VideoView, useVideoPlayer } from "expo-video";
 import * as MediaLibrary from "expo-media-library";
-import { Linking } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
-import { RefreshControl} from "react-native";
 
 const BASE_URL = "https://connect.schoolaid.in";
 const PRIMARY = "#0047AB";
@@ -2352,7 +2349,7 @@ const EMOJI_LIST = [
   "😢","😭","😤","😠","😡","🤬","😈","👿","💀","☠️",
 ];
 
-// ── Interfaces ─────────────────────────────────────────────
+// ── Interfaces ──────────────────────────────────────────────
 interface Message {
   id: string;
   text: string;
@@ -2383,7 +2380,6 @@ interface DownloadedFile {
   size?: number;
 }
 
-// ✅ FIX 1: Global search result type
 interface SearchResult {
   type: "message" | "media" | "file" | "voice";
   message: Message;
@@ -2392,15 +2388,12 @@ interface SearchResult {
 
 type TabType = "chat" | "media" | "downloads";
 
-// ── Helpers ────────────────────────────────────────────────
+// ── Helpers ─────────────────────────────────────────────────
 const buildUrl = (url: string) =>
   url?.startsWith("http") ? url : `${BASE_URL}/${url?.replace(/^\//, "") ?? ""}`;
 
 const formatTime = (iso: string) =>
-  new Date(iso).toLocaleTimeString("en-IN", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
 
 const formatDate = (iso: string) => {
   const d = new Date(iso);
@@ -2409,11 +2402,7 @@ const formatDate = (iso: string) => {
   yesterday.setDate(today.getDate() - 1);
   if (d.toDateString() === today.toDateString()) return "Today";
   if (d.toDateString() === yesterday.toDateString()) return "Yesterday";
-  return d.toLocaleDateString("en-IN", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+  return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
 };
 
 const getMimeType = (name: string): string => {
@@ -2427,27 +2416,14 @@ const getMimeType = (name: string): string => {
     ppt: "application/vnd.ms-powerpoint",
     pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     txt: "text/plain",
-    jpg: "image/jpeg",
-    jpeg: "image/jpeg",
-    png: "image/png",
-    gif: "image/gif",
-    mp4: "video/mp4",
-    mp3: "audio/mpeg",
-    m4a: "audio/m4a",
-    zip: "application/zip",
+    jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png",
+    gif: "image/gif", mp4: "video/mp4", mp3: "audio/mpeg",
+    m4a: "audio/m4a", zip: "application/zip",
   };
   return map[ext] ?? "application/octet-stream";
 };
 
-const isImageFile = (name: string) =>
-  ["jpg", "jpeg", "png", "gif", "webp"].includes(
-    name.split(".").pop()?.toLowerCase() ?? ""
-  );
-
-const isPdfFile = (name: string) =>
-  name.split(".").pop()?.toLowerCase() === "pdf";
-
-// ── VideoPlayerModal ────────────────────────────────────────
+// ── VideoPlayerModal ─────────────────────────────────────────
 function VideoPlayerModal({ uri, onClose }: { uri: string; onClose: () => void }) {
   const player = useVideoPlayer({ uri }, (p) => { p.loop = false; });
   useEffect(() => {
@@ -2458,21 +2434,16 @@ function VideoPlayerModal({ uri, onClose }: { uri: string; onClose: () => void }
   return (
     <Modal visible animationType="slide" onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: "#000", justifyContent: "center" }}>
-        <TouchableOpacity onPress={onClose} style={s.videoClose}>
+        <TouchableOpacity onPress={onClose} style={styles.videoClose}>
           <Ionicons name="close" size={26} color="#fff" />
         </TouchableOpacity>
-        <VideoView
-          player={player}
-          style={{ width: "100%", height: 350 }}
-          contentFit="contain"
-          nativeControls
-        />
+        <VideoView player={player} style={{ width: "100%", height: 350 }} contentFit="contain" nativeControls />
       </View>
     </Modal>
   );
 }
 
-// ── AudioPlayerModal ────────────────────────────────────────
+// ── AudioPlayerModal ─────────────────────────────────────────
 function AudioPlayerModal({ uri, name, onClose }: { uri: string; name: string; onClose: () => void }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -2484,11 +2455,8 @@ function AudioPlayerModal({ uri, name, onClose }: { uri: string; name: string; o
     const load = async () => {
       try {
         await Audio.setAudioModeAsync({
-          allowsRecordingIOS: false,
-          playsInSilentModeIOS: true,
-          staysActiveInBackground: false,
-          shouldDuckAndroid: true,
-          playThroughEarpieceAndroid: false,
+          allowsRecordingIOS: false, playsInSilentModeIOS: true,
+          staysActiveInBackground: false, shouldDuckAndroid: true, playThroughEarpieceAndroid: false,
         });
         const { sound } = await Audio.Sound.createAsync(
           { uri: uri.startsWith("http") ? buildUrl(uri) : uri },
@@ -2531,43 +2499,164 @@ function AudioPlayerModal({ uri, name, onClose }: { uri: string; name: string; o
 
   return (
     <Modal visible animationType="slide" transparent onRequestClose={onClose}>
-      <View style={fv.audioOverlay}>
-        <View style={fv.audioCard}>
-          <TouchableOpacity onPress={onClose} style={fv.audioClose}>
+      <View style={av.overlay}>
+        <View style={av.card}>
+          <TouchableOpacity onPress={onClose} style={av.closeBtn}>
             <Ionicons name="close" size={20} color="#6B7280" />
           </TouchableOpacity>
-          <View style={fv.audioIconWrap}>
+          <View style={av.iconWrap}>
             <Ionicons name="mic" size={32} color={PRIMARY} />
           </View>
-          <Text style={fv.audioTitle} numberOfLines={1}>{name}</Text>
-          <Text style={fv.audioSubtitle}>Voice Note</Text>
-          <View style={fv.waveformWrap}>
-            {bars.map((h, i) => {
-              const barProgress = i / bars.length;
-              const filled = barProgress <= progress;
-              return (
-                <View key={i} style={[fv.waveBar, { height: h * 2, backgroundColor: filled ? PRIMARY : "#E5E7EB" }]} />
-              );
-            })}
+          <Text style={av.title} numberOfLines={1}>{name}</Text>
+          <Text style={av.subtitle}>Voice Note</Text>
+          <View style={av.waveWrap}>
+            {bars.map((h, i) => (
+              <View key={i} style={[av.waveBar, { height: h * 2, backgroundColor: i / bars.length <= progress ? PRIMARY : "#E5E7EB" }]} />
+            ))}
           </View>
-          <View style={fv.audioTimeRow}>
-            <Text style={fv.audioTime}>{formatMs(position)}</Text>
-            <Text style={fv.audioTime}>{formatMs(duration)}</Text>
+          <View style={av.timeRow}>
+            <Text style={av.timeText}>{formatMs(position)}</Text>
+            <Text style={av.timeText}>{formatMs(duration)}</Text>
           </View>
-          {isLoading ? (
-            <ActivityIndicator size="large" color={PRIMARY} style={{ marginTop: 16 }} />
-          ) : (
-            <TouchableOpacity onPress={togglePlay} style={fv.audioPlayBtn} activeOpacity={0.85}>
-              <Ionicons name={isPlaying ? "pause" : "play"} size={28} color="#fff" />
-            </TouchableOpacity>
-          )}
+          {isLoading
+            ? <ActivityIndicator size="large" color={PRIMARY} style={{ marginTop: 16 }} />
+            : (
+              <TouchableOpacity onPress={togglePlay} style={av.playBtn} activeOpacity={0.85}>
+                <Ionicons name={isPlaying ? "pause" : "play"} size={28} color="#fff" />
+              </TouchableOpacity>
+            )
+          }
         </View>
       </View>
     </Modal>
   );
 }
 
-// ✅ FIX 1: Global Search Results Modal
+const av = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
+  card: { backgroundColor: "#fff", borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, alignItems: "center", paddingBottom: 40 },
+  closeBtn: { alignSelf: "flex-end", width: 32, height: 32, borderRadius: 16, backgroundColor: "#F3F4F6", alignItems: "center", justifyContent: "center", marginBottom: 16 },
+  iconWrap: { width: 80, height: 80, borderRadius: 40, backgroundColor: "#EEF3FF", alignItems: "center", justifyContent: "center", marginBottom: 14 },
+  title: { fontSize: 15, fontWeight: "700", color: "#1F2937", marginBottom: 4, maxWidth: 260, textAlign: "center" },
+  subtitle: { fontSize: 12, color: "#9CA3AF", marginBottom: 24 },
+  waveWrap: { flexDirection: "row", alignItems: "center", gap: 3, height: 40, marginBottom: 10 },
+  waveBar: { width: 4, borderRadius: 3 },
+  timeRow: { flexDirection: "row", justifyContent: "space-between", width: "100%", marginBottom: 24, paddingHorizontal: 4 },
+  timeText: { fontSize: 12, color: "#9CA3AF", fontWeight: "600" },
+  playBtn: { width: 64, height: 64, borderRadius: 32, backgroundColor: PRIMARY, alignItems: "center", justifyContent: "center" },
+});
+
+// ── InAppDocViewer ───────────────────────────────────────────
+function InAppDocViewer({ uri, name, onClose }: { uri: string; name: string; onClose: () => void }) {
+  const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
+
+  // Local file:// → use directly; Remote → Google Docs Viewer
+  const isLocal   = uri.startsWith("file://");
+  const isPdf     = name.toLowerCase().endsWith(".pdf");
+  const viewerUrl = isLocal
+    ? uri
+    : `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(uri)}&t=${retryKey}`;
+
+  return (
+    <Modal visible animationType="slide" onRequestClose={onClose}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: "#fff" }}>
+        {/* Header */}
+        <View style={dv.header}>
+          <TouchableOpacity onPress={onClose} style={dv.closeBtn}>
+            <Ionicons name="arrow-back" size={22} color="#1F2937" />
+          </TouchableOpacity>
+          <Text style={dv.title} numberOfLines={1}>{name}</Text>
+          {!isLocal && (
+            <TouchableOpacity
+              onPress={() => { setError(false); setLoading(true); setRetryKey(k => k + 1); }}
+              style={dv.reloadBtn}
+            >
+              <Ionicons name="refresh" size={20} color={PRIMARY} />
+            </TouchableOpacity>
+          )}
+          {isLocal && <View style={{ width: 36 }} />}
+        </View>
+
+        {/* Loading overlay */}
+        {loading && !error && (
+          <View style={dv.loaderWrap}>
+            <ActivityIndicator size="large" color={PRIMARY} />
+            <Text style={dv.loaderText}>Loading document...</Text>
+          </View>
+        )}
+
+        {/* Error state */}
+        {error && (
+          <View style={dv.errorWrap}>
+            <Ionicons name="document-outline" size={48} color="#D1D5DB" />
+            <Text style={dv.errorTitle}>Cannot preview this file</Text>
+            <Text style={dv.errorSub}>The file format may not be supported for in-app preview.</Text>
+            <TouchableOpacity
+              style={dv.retryBtn}
+              onPress={() => { setError(false); setLoading(true); setRetryKey(k => k + 1); }}
+            >
+              <Text style={dv.retryText}>Try Again</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* WebView */}
+        {!error && (
+          <WebView
+            key={`doc-${retryKey}`}
+            source={{ uri: viewerUrl }}
+            style={{ flex: 1 }}
+            onLoadStart={() => setLoading(true)}
+            onLoadEnd={() => setLoading(false)}
+            onError={() => { setLoading(false); setError(true); }}
+            onHttpError={() => { setLoading(false); setError(true); }}
+            javaScriptEnabled
+            domStorageEnabled
+            startInLoadingState={false}
+            allowFileAccess
+            allowUniversalAccessFromFileURLs
+            mixedContentMode="always"
+            // Auto-retry blank page (Google Docs Viewer quirk)
+            injectedJavaScript={!isLocal ? `
+              (function() {
+                setTimeout(function() {
+                  var b = document.body;
+                  if (!b || b.innerHTML.trim() === '' || b.innerText.trim() === '') {
+                    window.ReactNativeWebView.postMessage('BLANK');
+                  }
+                }, 3500);
+              })();
+              true;
+            ` : undefined}
+            onMessage={(e) => {
+              if (e.nativeEvent.data === "BLANK") {
+                setRetryKey(k => k + 1);
+              }
+            }}
+          />
+        )}
+      </SafeAreaView>
+    </Modal>
+  );
+}
+
+const dv = StyleSheet.create({
+  header:     { flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#E5E7EB", backgroundColor: "#fff", gap: 10 },
+  closeBtn:   { width: 36, height: 36, borderRadius: 18, backgroundColor: "#F3F4F6", alignItems: "center", justifyContent: "center" },
+  reloadBtn:  { width: 36, height: 36, borderRadius: 18, backgroundColor: "#EEF3FF", alignItems: "center", justifyContent: "center" },
+  title:      { flex: 1, fontSize: 14, fontWeight: "700", color: "#1F2937", textAlign: "center" },
+  loaderWrap: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center", backgroundColor: "#fff", gap: 12, zIndex: 10 },
+  loaderText: { fontSize: 13, color: PRIMARY, fontWeight: "600" },
+  errorWrap:  { flex: 1, alignItems: "center", justifyContent: "center", gap: 10, padding: 30 },
+  errorTitle: { fontSize: 16, fontWeight: "700", color: "#1F2937" },
+  errorSub:   { fontSize: 13, color: "#9CA3AF", textAlign: "center", lineHeight: 20 },
+  retryBtn:   { marginTop: 8, backgroundColor: PRIMARY, paddingHorizontal: 24, paddingVertical: 10, borderRadius: 10 },
+  retryText:  { color: "#fff", fontWeight: "700", fontSize: 14 },
+});
+
+// ── GlobalSearchModal ────────────────────────────────────────
 function GlobalSearchModal({
   results,
   onClose,
@@ -2578,21 +2667,21 @@ function GlobalSearchModal({
   onNavigate: (result: SearchResult) => void;
 }) {
   const getIcon = (type: SearchResult["type"]) => {
-    if (type === "media") return "image-outline";
-    if (type === "file") return "document-outline";
-    if (type === "voice") return "mic-outline";
+    if (type === "media")  return "image-outline";
+    if (type === "file")   return "document-outline";
+    if (type === "voice")  return "mic-outline";
     return "chatbubble-outline";
   };
-  const getIconColor = (type: SearchResult["type"]) => {
-    if (type === "media") return "#7C3AED";
-    if (type === "file") return "#EA580C";
-    if (type === "voice") return "#0891B2";
+  const getColor = (type: SearchResult["type"]) => {
+    if (type === "media")  return "#7C3AED";
+    if (type === "file")   return "#EA580C";
+    if (type === "voice")  return "#0891B2";
     return PRIMARY;
   };
   const getLabel = (type: SearchResult["type"]) => {
-    if (type === "media") return "Photo/Video";
-    if (type === "file") return "File";
-    if (type === "voice") return "Voice Note";
+    if (type === "media")  return "Photo/Video";
+    if (type === "file")   return "File";
+    if (type === "voice")  return "Voice Note";
     return "Message";
   };
 
@@ -2604,9 +2693,7 @@ function GlobalSearchModal({
             <Ionicons name="arrow-back" size={22} color="#1F2937" />
           </TouchableOpacity>
           <Text style={gs.title}>Search Results</Text>
-          <View style={gs.badge}>
-            <Text style={gs.badgeText}>{results.length}</Text>
-          </View>
+          <View style={gs.badge}><Text style={gs.badgeText}>{results.length}</Text></View>
         </View>
         {results.length === 0 ? (
           <View style={gs.empty}>
@@ -2621,13 +2708,13 @@ function GlobalSearchModal({
             contentContainerStyle={{ padding: 14, gap: 10 }}
             renderItem={({ item }) => (
               <TouchableOpacity style={gs.row} onPress={() => onNavigate(item)} activeOpacity={0.75}>
-                <View style={[gs.iconBox, { backgroundColor: getIconColor(item.type) + "18" }]}>
-                  <Ionicons name={getIcon(item.type)} size={20} color={getIconColor(item.type)} />
+                <View style={[gs.iconBox, { backgroundColor: getColor(item.type) + "18" }]}>
+                  <Ionicons name={getIcon(item.type)} size={20} color={getColor(item.type)} />
                 </View>
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <View style={gs.topRow}>
-                    <View style={[gs.typeBadge, { backgroundColor: getIconColor(item.type) + "18" }]}>
-                      <Text style={[gs.typeText, { color: getIconColor(item.type) }]}>{getLabel(item.type)}</Text>
+                    <View style={[gs.typeBadge, { backgroundColor: getColor(item.type) + "18" }]}>
+                      <Text style={[gs.typeText, { color: getColor(item.type) }]}>{getLabel(item.type)}</Text>
                     </View>
                     <Text style={gs.timeText}>{formatTime(item.message.createdAt)}</Text>
                   </View>
@@ -2647,210 +2734,99 @@ function GlobalSearchModal({
 }
 
 const gs = StyleSheet.create({
-  header: { flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 13, backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: "#E5E7EB", gap: 10 },
-  closeBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: "#F3F4F6", alignItems: "center", justifyContent: "center" },
-  title: { flex: 1, fontSize: 16, fontWeight: "800", color: "#1F2937" },
-  badge: { backgroundColor: PRIMARY, borderRadius: 12, paddingHorizontal: 9, paddingVertical: 3 },
+  header:    { flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 13, backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: "#E5E7EB", gap: 10 },
+  closeBtn:  { width: 36, height: 36, borderRadius: 18, backgroundColor: "#F3F4F6", alignItems: "center", justifyContent: "center" },
+  title:     { flex: 1, fontSize: 16, fontWeight: "800", color: "#1F2937" },
+  badge:     { backgroundColor: PRIMARY, borderRadius: 12, paddingHorizontal: 9, paddingVertical: 3 },
   badgeText: { color: "#fff", fontSize: 12, fontWeight: "700" },
-  empty: { flex: 1, alignItems: "center", justifyContent: "center", gap: 8 },
-  emptyTitle: { fontSize: 16, fontWeight: "700", color: "#1F2937" },
-  emptySub: { fontSize: 13, color: "#9CA3AF" },
-  row: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "#fff", borderRadius: 14, padding: 14, borderWidth: 1, borderColor: "#E8EFFA", elevation: 2, shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 6 },
-  iconBox: { width: 44, height: 44, borderRadius: 12, alignItems: "center", justifyContent: "center" },
-  topRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 3 },
+  empty:     { flex: 1, alignItems: "center", justifyContent: "center", gap: 8 },
+  emptyTitle:{ fontSize: 16, fontWeight: "700", color: "#1F2937" },
+  emptySub:  { fontSize: 13, color: "#9CA3AF" },
+  row:       { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "#fff", borderRadius: 14, padding: 14, borderWidth: 1, borderColor: "#E8EFFA", elevation: 2, shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 6 },
+  iconBox:   { width: 44, height: 44, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  topRow:    { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 3 },
   typeBadge: { borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2 },
-  typeText: { fontSize: 10, fontWeight: "700" },
-  timeText: { fontSize: 10, color: "#9CA3AF" },
+  typeText:  { fontSize: 10, fontWeight: "700" },
+  timeText:  { fontSize: 10, color: "#9CA3AF" },
   matchText: { fontSize: 13, color: "#1F2937", fontWeight: "600", lineHeight: 18 },
-  fromText: { fontSize: 11, color: "#9CA3AF", marginTop: 2 },
+  fromText:  { fontSize: 11, color: "#9CA3AF", marginTop: 2 },
 });
 
-// ── InAppFileViewer styles ──────────────────────────────────
-const fv = StyleSheet.create({
-  header: { flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#E5E7EB", backgroundColor: "#fff", gap: 10 },
-  closeBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: "#F3F4F6", alignItems: "center", justifyContent: "center" },
-  headerTitle: { flex: 1, fontSize: 14, fontWeight: "700", color: "#1F2937", textAlign: "center" },
-  loaderOverlay: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center", backgroundColor: "#fff", gap: 12, zIndex: 10 },
-  loaderText: { fontSize: 13, color: PRIMARY, fontWeight: "600" },
-  errorWrap: { flex: 1, alignItems: "center", justifyContent: "center", gap: 10, padding: 30 },
-  errorTitle: { fontSize: 16, fontWeight: "700", color: "#1F2937" },
-  errorSub: { fontSize: 13, color: "#9CA3AF", textAlign: "center", lineHeight: 20 },
-  audioOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
-  audioCard: { backgroundColor: "#fff", borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, alignItems: "center", paddingBottom: 40 },
-  audioClose: { alignSelf: "flex-end", width: 32, height: 32, borderRadius: 16, backgroundColor: "#F3F4F6", alignItems: "center", justifyContent: "center", marginBottom: 16 },
-  audioIconWrap: { width: 80, height: 80, borderRadius: 40, backgroundColor: "#EEF3FF", alignItems: "center", justifyContent: "center", marginBottom: 14 },
-  audioTitle: { fontSize: 15, fontWeight: "700", color: "#1F2937", marginBottom: 4, maxWidth: 260, textAlign: "center" },
-  audioSubtitle: { fontSize: 12, color: "#9CA3AF", marginBottom: 24 },
-  waveformWrap: { flexDirection: "row", alignItems: "center", gap: 3, height: 40, marginBottom: 10 },
-  waveBar: { width: 4, borderRadius: 3 },
-  audioTimeRow: { flexDirection: "row", justifyContent: "space-between", width: "100%", marginBottom: 24, paddingHorizontal: 4 },
-  audioTime: { fontSize: 12, color: "#9CA3AF", fontWeight: "600" },
-  audioPlayBtn: { width: 64, height: 64, borderRadius: 32, backgroundColor: PRIMARY, alignItems: "center", justifyContent: "center" },
-});
-
-// ── StatusTick ──────────────────────────────────────────────
+// ── StatusTick ───────────────────────────────────────────────
 function StatusTick({ status }: { status?: string }) {
   if (!status || status === "sending") return <Ionicons name="time-outline" size={11} color="rgba(255,255,255,0.5)" />;
-  if (status === "sent") return <Ionicons name="checkmark-outline" size={11} color="rgba(255,255,255,0.7)" />;
+  if (status === "sent")      return <Ionicons name="checkmark-outline" size={11} color="rgba(255,255,255,0.7)" />;
   if (status === "delivered") return <Ionicons name="checkmark-done-outline" size={11} color="rgba(255,255,255,0.7)" />;
-  if (status === "read") return <Ionicons name="checkmark-done-outline" size={11} color="#60D4F7" />;
+  if (status === "read")      return <Ionicons name="checkmark-done-outline" size={11} color="#60D4F7" />;
   return null;
 }
 
-function InAppDocViewer({ uri, name, onClose }: { uri: string; name: string; onClose: () => void }) {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-
-  // For remote files — use Google Docs viewer
-  // For local files — use WebView directly with file:// uri
-  const isLocal = uri.startsWith("file://");
-  const viewerUrl = isLocal ? uri : `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(uri)}`;
-
-  return (
-    <Modal visible animationType="slide" onRequestClose={onClose}>
-      <SafeAreaView style={{ flex: 1, backgroundColor: "#fff" }}>
-        {/* Header */}
-        <View style={dv.header}>
-          <TouchableOpacity onPress={onClose} style={dv.closeBtn}>
-            <Ionicons name="arrow-back" size={22} color="#1F2937" />
-          </TouchableOpacity>
-          <Text style={dv.title} numberOfLines={1}>{name}</Text>
-          <View style={{ width: 36 }} />
-        </View>
-
-        {/* Loading overlay */}
-        {loading && !error && (
-          <View style={dv.loaderWrap}>
-            <ActivityIndicator size="large" color={PRIMARY} />
-            <Text style={dv.loaderText}>Loading document...</Text>
-          </View>
-        )}
-
-        {/* Error state */}
-        {error && (
-          <View style={dv.errorWrap}>
-            <Ionicons name="document-outline" size={48} color="#D1D5DB" />
-            <Text style={dv.errorTitle}>Cannot preview this file</Text>
-            <Text style={dv.errorSub}>The file format may not be supported for in-app preview.</Text>
-          </View>
-        )}
-
-        {/* WebView */}
-        {!error && (
-          <WebView
-            source={{ uri: viewerUrl }}
-            style={{ flex: 1 }}
-            onLoadStart={() => setLoading(true)}
-            onLoadEnd={() => setLoading(false)}
-            onError={() => { setLoading(false); setError(true); }}
-            onHttpError={() => { setLoading(false); setError(true); }}
-            javaScriptEnabled
-            domStorageEnabled
-            startInLoadingState={false}
-            allowFileAccess={true}
-            allowUniversalAccessFromFileURLs={true}
-            mixedContentMode="always"
-          />
-        )}
-      </SafeAreaView>
-    </Modal>
-  );
-}
-
-const dv = StyleSheet.create({
-  header: {
-    flexDirection: "row", alignItems: "center", paddingHorizontal: 12,
-    paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#E5E7EB",
-    backgroundColor: "#fff", gap: 10,
-  },
-  closeBtn: {
-    width: 36, height: 36, borderRadius: 18, backgroundColor: "#F3F4F6",
-    alignItems: "center", justifyContent: "center",
-  },
-  title: { flex: 1, fontSize: 14, fontWeight: "700", color: "#1F2937", textAlign: "center" },
-  loaderWrap: {
-    ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center",
-    backgroundColor: "#fff", gap: 12, zIndex: 10,
-  },
-  loaderText: { fontSize: 13, color: PRIMARY, fontWeight: "600" },
-  errorWrap: { flex: 1, alignItems: "center", justifyContent: "center", gap: 10, padding: 30 },
-  errorTitle: { fontSize: 16, fontWeight: "700", color: "#1F2937" },
-  errorSub: { fontSize: 13, color: "#9CA3AF", textAlign: "center", lineHeight: 20 },
-});
-
-// ── Main Component ──────────────────────────────────────────
+// ── Main Component ───────────────────────────────────────────
 export default function MessageScreen() {
   const { theme } = useTheme();
   const router = useRouter();
   const { childId, childName, classname, sectionname } = useLocalSearchParams<{
-    childId: string;
-    childName: string;
-    classname: string;
-    sectionname: string;
+    childId: string; childName: string; classname: string; sectionname: string;
   }>();
 
-  // ── State ─────────────────────────────────────────────────
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [inputText, setInputText] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [sending, setSending] = useState(false);
-  const [token, setToken] = useState("");
-  const [threadId, setThreadId] = useState<number | null>(null);
-  const [attachments, setAttachments] = useState<AttachmentItem[]>([]);
-  const [previewItem, setPreviewItem] = useState<{ uri: string; type: "image" | "file"; name?: string } | null>(null);
-  const [contextMsg, setContextMsg] = useState<Message | null>(null);
-  const [replyTo, setReplyTo] = useState<Message | null>(null);
-  const [editingMsg, setEditingMsg] = useState<Message | null>(null);
-  const [pinnedIds, setPinnedIds] = useState<string[]>([]);
-  const [isRecording, setIsRecording] = useState(false);
-  const [isTranscribing, setIsTranscribing] = useState(false);
-  const [playingId, setPlayingId] = useState<string | null>(null);
-  const [showCamera, setShowCamera] = useState(false);
-  const [cameraFacing, setCameraFacing] = useState<"front" | "back">("back");
-  const [isVideoRecording, setIsVideoRecording] = useState(false);
-  const [previewVideo, setPreviewVideo] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<TabType>("chat");
-  const [docViewer, setDocViewer] = useState<{ uri: string; name: string } | null>(null);
-  const [refreshingMedia, setRefreshingMedia] = useState(false);
-const [refreshingDownloads, setRefreshingDownloads] = useState(false);
-
-  // ✅ FIX 1: Global search state
-  const [searchQuery, setSearchQuery] = useState("");
-  const [showSearch, setShowSearch] = useState(false);
-  const [globalSearchResults, setGlobalSearchResults] = useState<SearchResult[]>([]);
-  const [showGlobalResults, setShowGlobalResults] = useState(false);
-
+  // ── State ──────────────────────────────────────────────────
+  const [messages,        setMessages]        = useState<Message[]>([]);
+  const [inputText,       setInputText]       = useState("");
+  const [loading,         setLoading]         = useState(true);
+  const [sending,         setSending]         = useState(false);
+  const [token,           setToken]           = useState("");
+  const [threadId,        setThreadId]        = useState<number | null>(null);
+  const [attachments,     setAttachments]     = useState<AttachmentItem[]>([]);
+  const [previewItem,     setPreviewItem]     = useState<{ uri: string; type: "image"; name?: string } | null>(null);
+  const [contextMsg,      setContextMsg]      = useState<Message | null>(null);
+  const [replyTo,         setReplyTo]         = useState<Message | null>(null);
+  const [editingMsg,      setEditingMsg]      = useState<Message | null>(null);
+  const [pinnedIds,       setPinnedIds]       = useState<string[]>([]);
+  const [isRecording,     setIsRecording]     = useState(false);
+  const [isTranscribing,  setIsTranscribing]  = useState(false);
+  const [showCamera,      setShowCamera]      = useState(false);
+  const [cameraFacing,    setCameraFacing]    = useState<"front" | "back">("back");
+  const [isVideoRecording,setIsVideoRecording]= useState(false);
+  const [activeTab,       setActiveTab]       = useState<TabType>("chat");
+  const [mediaSubTab,     setMediaSubTab]     = useState<"photos" | "docs">("photos");
+  const [filesExpanded,   setFilesExpanded]   = useState(true);
+  const [voiceExpanded,   setVoiceExpanded]   = useState(true);
+  const [savedFiles,      setSavedFiles]      = useState<DownloadedFile[]>([]);
+  const [downloads,       setDownloads]       = useState<Record<string, "downloading" | "done">>({});
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [downloads, setDownloads] = useState<Record<string, "downloading" | "done">>({});
-  const [mediaSubTab, setMediaSubTab] = useState<"photos" | "docs">("photos");
-  const [filesExpanded, setFilesExpanded] = useState(true);
-  const [voiceExpanded, setVoiceExpanded] = useState(true);
-  const [savedFiles, setSavedFiles] = useState<DownloadedFile[]>([]);
+  const [showSearch,      setShowSearch]      = useState(false);
+  const [searchQuery,     setSearchQuery]     = useState("");
+  const [showGlobalResults, setShowGlobalResults] = useState(false);
+  const [globalSearchResults, setGlobalSearchResults] = useState<SearchResult[]>([]);
+  const [refreshingMedia,     setRefreshingMedia]     = useState(false);
+  const [refreshingDownloads, setRefreshingDownloads] = useState(false);
+
+  // Viewer states — each null = closed
+  const [docViewer,   setDocViewer]   = useState<{ uri: string; name: string } | null>(null);
+  const [previewVideo,setPreviewVideo]= useState<string | null>(null);
   const [audioPlayer, setAudioPlayer] = useState<{ uri: string; name: string } | null>(null);
 
-  // ✅ FIX 2: Loading state for file opening
-  const [fileOpeningLoading, setFileOpeningLoading] = useState(false);
-
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
-  const [micPermission, requestMicPermission] = useMicrophonePermissions();
+  const [micPermission,    requestMicPermission]    = useMicrophonePermissions();
 
   // ── Refs ───────────────────────────────────────────────────
-  const flatListRef = useRef<FlatList>(null);
-  const inputRef = useRef<TextInput>(null);
-  const contextMsgRef = useRef<Message | null>(null);
-  const editingMsgRef = useRef<Message | null>(null);
-  const pinnedIdsRef = useRef<string[]>([]);
-  const soundRef = useRef<Audio.Sound | null>(null);
-  const recordingRef = useRef<Audio.Recording | null>(null);
-  const cameraRef = useRef<CameraView>(null);
+  const flatListRef     = useRef<FlatList>(null);
+  const inputRef        = useRef<TextInput>(null);
+  const contextMsgRef   = useRef<Message | null>(null);
+  const editingMsgRef   = useRef<Message | null>(null);
+  const pinnedIdsRef    = useRef<string[]>([]);
+  const soundRef        = useRef<Audio.Sound | null>(null);
+  const recordingRef    = useRef<Audio.Recording | null>(null);
+  const cameraRef       = useRef<CameraView>(null);
 
-  useEffect(() => { contextMsgRef.current = contextMsg; }, [contextMsg]);
-  useEffect(() => { editingMsgRef.current = editingMsg; }, [editingMsg]);
-  useEffect(() => { pinnedIdsRef.current = pinnedIds; }, [pinnedIds]);
+  useEffect(() => { contextMsgRef.current = contextMsg; },  [contextMsg]);
+  useEffect(() => { editingMsgRef.current = editingMsg; },  [editingMsg]);
+  useEffect(() => { pinnedIdsRef.current  = pinnedIds; },   [pinnedIds]);
   useEffect(() => () => { soundRef.current?.unloadAsync(); }, []);
 
-  const DOWNLOADS_STORAGE_KEY = `savedFiles_${childId}`;
+  const DOWNLOADS_KEY = `savedFiles_${childId}`;
 
+  // ── Storage helpers ────────────────────────────────────────
   const loadPinned = async () => {
     try {
       const raw = await AsyncStorage.getItem(`pinnedMsgs_${childId}`);
@@ -2860,33 +2836,33 @@ const [refreshingDownloads, setRefreshingDownloads] = useState(false);
 
   const loadSavedFiles = async () => {
     try {
-      const raw = await AsyncStorage.getItem(DOWNLOADS_STORAGE_KEY);
+      const raw = await AsyncStorage.getItem(DOWNLOADS_KEY);
       if (raw) setSavedFiles(JSON.parse(raw));
     } catch {}
   };
 
   const persistSavedFile = async (entry: DownloadedFile) => {
     try {
-      const raw = await AsyncStorage.getItem(DOWNLOADS_STORAGE_KEY);
+      const raw = await AsyncStorage.getItem(DOWNLOADS_KEY);
       const current: DownloadedFile[] = raw ? JSON.parse(raw) : [];
       const updated = [entry, ...current.filter((f) => f.url !== entry.url)];
-      await AsyncStorage.setItem(DOWNLOADS_STORAGE_KEY, JSON.stringify(updated));
+      await AsyncStorage.setItem(DOWNLOADS_KEY, JSON.stringify(updated));
       setSavedFiles(updated);
     } catch {}
   };
 
   const removeSavedFile = async (key: string) => {
     try {
-      const raw = await AsyncStorage.getItem(DOWNLOADS_STORAGE_KEY);
+      const raw = await AsyncStorage.getItem(DOWNLOADS_KEY);
       const current: DownloadedFile[] = raw ? JSON.parse(raw) : [];
       const updated = current.filter((f) => f.key !== key);
-      await AsyncStorage.setItem(DOWNLOADS_STORAGE_KEY, JSON.stringify(updated));
+      await AsyncStorage.setItem(DOWNLOADS_KEY, JSON.stringify(updated));
       setSavedFiles(updated);
     } catch {}
   };
 
   // ── Fetch messages ─────────────────────────────────────────
-  const fetchMessages = async (t: string, newThreadId?: number) => {
+  const fetchMessages = useCallback(async (t: string, newThreadId?: number) => {
     setLoading(true);
     try {
       const savedRaw = await AsyncStorage.getItem(`allThreadIds_${childId}`);
@@ -2900,10 +2876,9 @@ const [refreshingDownloads, setRefreshingDownloads] = useState(false);
       const allArrays = await Promise.all(
         savedIds.map(async (tid) => {
           try {
-            const res = await fetch(
-              `${BASE_URL}/api/parent-notes/threads/${tid}/messages`,
-              { headers: { Authorization: `Bearer ${t}`, "Content-Type": "application/json" } }
-            );
+            const res = await fetch(`${BASE_URL}/api/parent-notes/threads/${tid}/messages`, {
+              headers: { Authorization: `Bearer ${t}`, "Content-Type": "application/json", "x-academic-year-id": await AsyncStorage.getItem("selectedYearId") ?? "16" },
+            });
             if (!res.ok) return [];
             const data = await res.json();
             return data.data ?? data ?? [];
@@ -2920,30 +2895,23 @@ const [refreshingDownloads, setRefreshingDownloads] = useState(false);
 
       const mapped: Message[] = combined.map((m: any) => {
         const attachName = m.attachment_name ?? undefined;
-        const attachUrl = m.attachment_url ?? undefined;
+        const attachUrl  = m.attachment_url  ?? undefined;
         const isVideo = attachName?.endsWith(".mp4") || attachName?.includes("video_") || attachUrl?.endsWith(".mp4");
         const isVoice = attachName?.endsWith(".m4a") || attachName?.includes("voice_") || attachUrl?.endsWith(".m4a") || attachUrl?.includes("voice_");
-        const isImage = attachName
-          ? ["jpg", "jpeg", "png", "gif", "webp"].includes(attachName.split(".").pop()?.toLowerCase() ?? "")
-          : false;
-        const attachType = isVideo ? "video" : isVoice ? "file" : isImage ? "image" : attachUrl ? "file" : undefined;
+        const isImg   = attachName ? ["jpg","jpeg","png","gif","webp"].includes(attachName.split(".").pop()?.toLowerCase() ?? "") : false;
+        const attachType = isVideo ? "video" : (isVoice ? "file" : (isImg ? "image" : (attachUrl ? "file" : undefined)));
         const senderIsTeacher = m.sender_type === "teacher";
         return {
-          id: String(m.id ?? m._id ?? Math.random()),
-          text: (() => {
-            const raw = m.message ?? m.body ?? m.text ?? "";
-            try { return decodeURIComponent(raw); } catch { return raw; }
-          })(),
-          sender: senderIsTeacher ? "teacher" : "parent",
-          createdAt: m.created_at ?? m.createdAt ?? new Date().toISOString(),
-          attachmentUrl: attachUrl,
+          id:             String(m.id ?? m._id ?? Math.random()),
+          text:           (() => { const raw = m.message ?? m.body ?? m.text ?? ""; try { return decodeURIComponent(raw); } catch { return raw; } })(),
+          sender:         senderIsTeacher ? "teacher" : "parent",
+          createdAt:      m.created_at ?? m.createdAt ?? new Date().toISOString(),
+          attachmentUrl:  attachUrl,
           attachmentType: attachType,
           attachmentName: attachName,
-          replyToId: m.reply_to_id ? String(m.reply_to_id) : undefined,
-          replyToText: m.reply_to_text ?? m.reply_message ?? undefined,
-          status: senderIsTeacher
-            ? undefined
-            : m.is_read ? "read" : m.is_delivered ? "delivered" : "sent",
+          replyToId:      m.reply_to_id ? String(m.reply_to_id) : undefined,
+          replyToText:    m.reply_to_text ?? m.reply_message ?? undefined,
+          status:         senderIsTeacher ? undefined : (m.is_read ? "read" : (m.is_delivered ? "delivered" : "sent")),
         };
       });
 
@@ -2953,7 +2921,7 @@ const [refreshingDownloads, setRefreshingDownloads] = useState(false);
     } finally {
       setLoading(false);
     }
-  };
+  }, [childId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -2973,14 +2941,14 @@ const [refreshingDownloads, setRefreshingDownloads] = useState(false);
     }, [childId])
   );
 
+  // Auto-poll read status
   useEffect(() => {
     if (!token || !threadId) return;
     const interval = setInterval(async () => {
       try {
-        const res = await fetch(
-          `${BASE_URL}/api/parent-notes/threads/${threadId}/messages`,
-          { headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } }
-        );
+        const res = await fetch(`${BASE_URL}/api/parent-notes/threads/${threadId}/messages`, {
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" ,"x-academic-year-id": await AsyncStorage.getItem("selectedYearId") ?? "16" },
+        });
         if (!res.ok) return;
         const data = await res.json();
         const msgs: any[] = data.data ?? data ?? [];
@@ -2989,9 +2957,9 @@ const [refreshingDownloads, setRefreshingDownloads] = useState(false);
           if (!hasUnread) return prev;
           return prev.map((m) => {
             if (m.sender !== "parent" || m.status === "read") return m;
-            const serverMsg = msgs.find((sm) => String(sm.id) === String(m.id));
-            if (!serverMsg) return m;
-            const newStatus = serverMsg.is_read ? "read" : serverMsg.is_delivered ? "delivered" : "sent";
+            const sm = msgs.find((x) => String(x.id) === String(m.id));
+            if (!sm) return m;
+            const newStatus = sm.is_read ? "read" : sm.is_delivered ? "delivered" : "sent";
             return newStatus !== m.status ? { ...m, status: newStatus } : m;
           });
         });
@@ -3000,7 +2968,7 @@ const [refreshingDownloads, setRefreshingDownloads] = useState(false);
     return () => clearInterval(interval);
   }, [token, threadId]);
 
-  // ✅ FIX 1: Global search — runs across all message types
+  // ── Global search ──────────────────────────────────────────
   useEffect(() => {
     if (!searchQuery.trim()) {
       setGlobalSearchResults([]);
@@ -3009,59 +2977,75 @@ const [refreshingDownloads, setRefreshingDownloads] = useState(false);
     }
     const q = searchQuery.toLowerCase().trim();
     const results: SearchResult[] = [];
-
     messages.forEach((m) => {
-      const isVoice = m.attachmentName?.endsWith(".m4a") || m.attachmentName?.includes("voice_") ||
-        m.attachmentUrl?.endsWith(".m4a") || m.attachmentUrl?.includes("voice_");
-      const isVideo = m.attachmentType === "video" || m.attachmentName?.endsWith(".mp4") || m.attachmentName?.includes("video_");
+      const isVoice = m.attachmentName?.endsWith(".m4a") || m.attachmentName?.includes("voice_");
+      const isVideo = m.attachmentType === "video";
       const isImage = m.attachmentType === "image";
-      const isFile = m.attachmentType === "file" && !isVoice && !isVideo;
-
+      const isFile  = m.attachmentType === "file" && !isVoice;
       const textMatch = m.text?.toLowerCase().includes(q);
       const nameMatch = m.attachmentName?.toLowerCase().includes(q);
       const dateMatch = formatDate(m.createdAt).toLowerCase().includes(q);
-
       if (textMatch || nameMatch || dateMatch) {
         let type: SearchResult["type"] = "message";
         if (isVoice) type = "voice";
         else if (isVideo || isImage) type = "media";
         else if (isFile) type = "file";
-
-        results.push({
-          type,
-          message: m,
-          matchText: m.text || m.attachmentName || "",
-        });
+        results.push({ type, message: m, matchText: m.text || m.attachmentName || "" });
       }
     });
-
     setGlobalSearchResults(results);
   }, [searchQuery, messages]);
 
-  const handleRefresh = async () => {
-  if (activeTab === "chat") {
-    await fetchMessages(token);
-  } else if (activeTab === "media") {
-    setRefreshingMedia(true);
-    await fetchMessages(token);
-    setRefreshingMedia(false);
-  } else if (activeTab === "downloads") {
-    setRefreshingDownloads(true);
-    await loadSavedFiles();
-    setRefreshingDownloads(false);
-  }
-};
+  // ── Open file helpers ──────────────────────────────────────
+  // FIX: Close all viewers first, then open the new one after a small delay
+  // This prevents "second file won't open" bug where old Modal was still mounted
+  const closeAllViewers = useCallback(() => {
+    setDocViewer(null);
+    setPreviewVideo(null);
+    setAudioPlayer(null);
+    setPreviewItem(null);
+  }, []);
 
-  // ── Download file/video ────────────────────────────────────
+  const openInApp = useCallback(async (uri: string, name: string) => {
+    const n   = (name ?? "").toLowerCase();
+    const ext = n.split(".").pop() ?? "";
+    const isVoice = ext === "m4a" || n.includes("voice_");
+    const isVideo = ext === "mp4" || n.includes("video_");
+    const isImage = ["jpg","jpeg","png","gif","webp"].includes(ext);
+    const fullUrl = uri.startsWith("http") ? uri : `${BASE_URL}/${uri.replace(/^\//, "")}`;
+
+    closeAllViewers();
+    // Small delay so previous Modal unmounts cleanly before new one mounts
+    await new Promise<void>((resolve) => setTimeout(resolve, 120));
+
+    if (isVideo) { setPreviewVideo(fullUrl); return; }
+    if (isVoice) { setAudioPlayer({ uri: fullUrl, name }); return; }
+    if (isImage) { setPreviewItem({ uri: fullUrl, type: "image", name }); return; }
+    setDocViewer({ uri: fullUrl, name });
+  }, [closeAllViewers]);
+
+  const openLocalFile = useCallback(async (localUri: string, name: string) => {
+    const n   = (name ?? "").toLowerCase();
+    const ext = n.split(".").pop() ?? "";
+    const isVoice = ext === "m4a" || n.includes("voice_");
+    const isVideo = ext === "mp4";
+    const isImage = ["jpg","jpeg","png","gif","webp"].includes(ext);
+
+    closeAllViewers();
+    await new Promise<void>((resolve) => setTimeout(resolve, 120));
+
+    if (isVideo) { setPreviewVideo(localUri); return; }
+    if (isVoice) { setAudioPlayer({ uri: localUri, name }); return; }
+    if (isImage) { setPreviewItem({ uri: localUri, type: "image", name }); return; }
+    setDocViewer({ uri: localUri, name });
+  }, [closeAllViewers]);
+
+  // ── Download ───────────────────────────────────────────────
   const downloadFile = async (url: string, name: string, type: "file" | "video") => {
     const key = url;
     if (downloads[key] === "downloading") return;
-
     const fullUrl = url.startsWith("http") ? url : `${BASE_URL}/${url.replace(/^\//, "")}`;
-    console.log("[DOWNLOAD] fullUrl:", fullUrl);
-
     setDownloads((prev) => ({ ...prev, [key]: "downloading" }));
-
     try {
       if (type === "video") {
         const { status } = await MediaLibrary.requestPermissionsAsync();
@@ -3071,153 +3055,79 @@ const [refreshingDownloads, setRefreshingDownloads] = useState(false);
           return;
         }
       }
-
       const folder = `${FileSystem.documentDirectory}SchoolAid/`;
       await FileSystem.makeDirectoryAsync(folder, { intermediates: true });
       const safeFileName = `${Date.now()}_${name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
       const destUri = `${folder}${safeFileName}`;
-
       const downloadRes = await FileSystem.downloadAsync(fullUrl, destUri, {
         headers: { Authorization: `Bearer ${token}`, Accept: "*/*" },
       });
-
       if (downloadRes.status !== 200) throw new Error(`HTTP ${downloadRes.status}`);
-
       const fileInfo = (await FileSystem.getInfoAsync(downloadRes.uri)) as any;
-      if (!fileInfo.exists || (fileInfo.size ?? 0) === 0) throw new Error("Downloaded file is empty or missing");
+      if (!fileInfo.exists || (fileInfo.size ?? 0) === 0) throw new Error("Downloaded file is empty");
 
       if (type === "video") {
         const asset = await MediaLibrary.createAssetAsync(downloadRes.uri);
         let album = await MediaLibrary.getAlbumAsync("SchoolAid");
         if (!album) album = await MediaLibrary.createAlbumAsync("SchoolAid", asset, false);
         else await MediaLibrary.addAssetsToAlbumAsync([asset], album, false);
-
         setDownloads((prev) => ({ ...prev, [key]: "done" }));
-        await persistSavedFile({
-          key: `${url}_${Date.now()}`,
-          url,
-          localUri: downloadRes.uri,
-          name,
-          type: "video",
-          savedAt: new Date().toISOString(),
-        });
+        await persistSavedFile({ key: `${url}_${Date.now()}`, url, localUri: downloadRes.uri, name, type: "video", savedAt: new Date().toISOString() });
         Alert.alert("Saved!", "Video saved to Photos > SchoolAid album.\nAlso visible in the Downloads tab.");
       } else {
         setDownloads((prev) => ({ ...prev, [key]: "done" }));
-        await persistSavedFile({
-          key: `${url}_${Date.now()}`,
-          url,
-          localUri: downloadRes.uri,
-          name,
-          type: "file",
-          savedAt: new Date().toISOString(),
-          size: fileInfo.size ?? undefined,
-        });
+        await persistSavedFile({ key: `${url}_${Date.now()}`, url, localUri: downloadRes.uri, name, type: "file", savedAt: new Date().toISOString(), size: fileInfo.size });
         Alert.alert("Downloaded!", `"${name}" saved.\nFind it in the Downloads tab.`);
       }
     } catch (err: any) {
-      console.error("[DOWNLOAD] error:", err?.message ?? err);
       setDownloads((prev) => { const n = { ...prev }; delete n[key]; return n; });
-      Alert.alert("Download Failed", `Error: ${err?.message ?? "Unknown error"}`);
+      Alert.alert("Download Failed", err?.message ?? "Unknown error");
     }
   };
 
-  // ── Open any REMOTE file in-app (from chat bubbles / media tab) ──────────────
-  // NO download needed — uses Google Docs viewer for PDFs/docs just like your home tab.
-  // Google Docs viewer: https://docs.google.com/gview?embedded=true&url=<encoded_url>
-const openInApp = async (uri: string, name: string) => {
-  // Close any existing viewers first
-  setDocViewer(null);
-  setPreviewVideo(null);
-  setAudioPlayer(null);
-  setPreviewItem(null);
-
-  // Small delay to let previous modal unmount cleanly
-  await new Promise(r => setTimeout(r, 100));
-
-  const n = (name ?? "").toLowerCase();
-  const ext = n.split(".").pop() ?? "";
-  const isVoice = ext === "m4a" || n.includes("voice_");
-  const isVideo = ext === "mp4" || n.includes("video_");
-  const isImage = ["jpg", "jpeg", "png", "gif", "webp"].includes(ext);
-
-  const fullUrl = uri.startsWith("http") ? uri : `${BASE_URL}/${uri.replace(/^\//, "")}`;
-
-  if (isVideo) { setPreviewVideo(fullUrl); return; }
-  if (isVoice) { setAudioPlayer({ uri: fullUrl, name }); return; }
-  if (isImage) { setPreviewItem({ uri: fullUrl, type: "image", name }); return; }
-
-  setDocViewer({ uri: fullUrl, name });
-};
-
-  // ── Open a LOCAL downloaded file (Downloads tab) ───────────────────────────
-  // Local file:// URIs can't go to Google Docs viewer.
-  // Android: use IntentLauncher with a content:// URI (getContentUriAsync).
-  // iOS: WebBrowser handles file:// URIs natively.
-const openLocalFile = async (localUri: string, name: string) => {
-  // Close any existing viewers first
-  setDocViewer(null);
-  setPreviewVideo(null);
-  setAudioPlayer(null);
-  setPreviewItem(null);
-
-  await new Promise(r => setTimeout(r, 100));
-
-  const n = (name ?? "").toLowerCase();
-  const ext = n.split(".").pop() ?? "";
-  const isVoice = ext === "m4a" || n.includes("voice_");
-  const isVideo = ext === "mp4";
-  const isImage = ["jpg", "jpeg", "png", "gif", "webp"].includes(ext);
-
-  if (isVideo) { setPreviewVideo(localUri); return; }
-  if (isVoice) { setAudioPlayer({ uri: localUri, name }); return; }
-  if (isImage) { setPreviewItem({ uri: localUri, type: "image", name }); return; }
-
-  setDocViewer({ uri: localUri, name });
-};
-
   // ── DownloadIcon ───────────────────────────────────────────
- const DownloadIcon = ({ url, name, type, tintColor }: { url: string; name: string; type: "file" | "video"; tintColor: string }) => {
-  const state = downloads[url];
-  const alreadySaved = savedFiles.some((f) => f.url === url);
-  if (state === "downloading") return <ActivityIndicator size="small" color={tintColor} />;
-  return (
-    <TouchableOpacity
-      onPress={() => downloadFile(url, name, type)}
-      style={s.downloadBtn}
-      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-    >
-      <Ionicons
-        name={state === "done" || alreadySaved ? "checkmark-circle" : "arrow-down-circle-outline"}
-        size={22}
-        color={state === "done" || alreadySaved ? "#22C55E" : tintColor}
-      />
-    </TouchableOpacity>
-  );
-};
+  const DownloadIcon = ({ url, name, type, tintColor }: { url: string; name: string; type: "file" | "video"; tintColor: string }) => {
+    const state       = downloads[url];
+    const alreadySaved = savedFiles.some((f) => f.url === url);
+    if (state === "downloading") return <ActivityIndicator size="small" color={tintColor} />;
+    return (
+      <TouchableOpacity onPress={() => downloadFile(url, name, type)} style={styles.downloadBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        <Ionicons
+          name={state === "done" || alreadySaved ? "checkmark-circle" : "arrow-down-circle-outline"}
+          size={22}
+          color={state === "done" || alreadySaved ? "#22C55E" : tintColor}
+        />
+      </TouchableOpacity>
+    );
+  };
 
-  const handleEmojiSelect = (emoji: string) => setInputText((prev) => prev + emoji);
+  // ── Refresh handlers ───────────────────────────────────────
+  const handleRefreshMedia = async () => {
+    setRefreshingMedia(true);
+    await fetchMessages(token);
+    setRefreshingMedia(false);
+  };
 
-  // ── Image picker ───────────────────────────────────────────
+  const handleRefreshDownloads = async () => {
+    setRefreshingDownloads(true);
+    await loadSavedFiles();
+    setRefreshingDownloads(false);
+  };
+
+  // ── Pickers ────────────────────────────────────────────────
   const pickImage = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) { Alert.alert("Permission required", "Please allow access to your photo library."); return; }
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.8, allowsMultipleSelection: true });
     if (!result.canceled && result.assets.length > 0) {
-      setAttachments((prev) => [
-        ...prev,
-        ...result.assets.map((a) => ({ uri: a.uri, type: "image" as const, name: a.fileName ?? "image.jpg", mimeType: a.mimeType ?? "image/jpeg" })),
-      ]);
+      setAttachments((prev) => [...prev, ...result.assets.map((a) => ({ uri: a.uri, type: "image" as const, name: a.fileName ?? "image.jpg", mimeType: a.mimeType ?? "image/jpeg" }))]);
     }
   };
 
   const pickFile = async () => {
     const result = await DocumentPicker.getDocumentAsync({ type: "*/*", copyToCacheDirectory: true, multiple: true });
     if (!result.canceled && result.assets.length > 0) {
-      setAttachments((prev) => [
-        ...prev,
-        ...result.assets.map((a) => ({ uri: a.uri, type: "file" as const, name: a.name, mimeType: a.mimeType ?? "application/octet-stream" })),
-      ]);
+      setAttachments((prev) => [...prev, ...result.assets.map((a) => ({ uri: a.uri, type: "file" as const, name: a.name, mimeType: a.mimeType ?? "application/octet-stream" }))]);
     }
   };
 
@@ -3235,9 +3145,9 @@ const openLocalFile = async (localUri: string, name: string) => {
 
   const showAttachmentOptions = () =>
     Alert.alert("Attach", "Choose attachment type", [
-      { text: "Photo", onPress: pickImage },
-      { text: "File", onPress: pickFile },
-      { text: "Video", onPress: openCamera },
+      { text: "Photo",  onPress: pickImage },
+      { text: "File",   onPress: pickFile },
+      { text: "Video",  onPress: openCamera },
       { text: "Cancel", style: "cancel" },
     ]);
 
@@ -3272,15 +3182,12 @@ const openLocalFile = async (localUri: string, name: string) => {
       if (!tempUri) throw new Error("No recording URI");
       const baseDir = FileSystem.documentDirectory ?? FileSystem.cacheDirectory;
       if (!baseDir) throw new Error("No writable directory");
-      const fileName = `voice_${Date.now()}.m4a`;
+      const fileName     = `voice_${Date.now()}.m4a`;
       const permanentUri = `${baseDir}${fileName}`;
       await FileSystem.copyAsync({ from: tempUri, to: permanentUri });
       const fileInfo = (await FileSystem.getInfoAsync(permanentUri)) as any;
       if (!fileInfo.exists || (fileInfo.size ?? 0) === 0) throw new Error("Recording file empty");
-      setAttachments((prev) => [
-        ...prev,
-        { uri: permanentUri, type: "file", name: fileName, mimeType: "audio/m4a" },
-      ]);
+      setAttachments((prev) => [...prev, { uri: permanentUri, type: "file", name: fileName, mimeType: "audio/m4a" }]);
     } catch { Alert.alert("Error", "Could not process recording."); }
     finally { setIsTranscribing(false); }
   };
@@ -3291,26 +3198,19 @@ const openLocalFile = async (localUri: string, name: string) => {
       setIsVideoRecording(true);
       const video = await cameraRef.current.recordAsync({ maxDuration: 60 });
       if (!video?.uri) throw new Error("No video URI");
-      const fileName = `video_${Date.now()}.mp4`;
-      const baseDir = FileSystem.documentDirectory ?? FileSystem.cacheDirectory ?? "";
+      const fileName     = `video_${Date.now()}.mp4`;
+      const baseDir      = FileSystem.documentDirectory ?? FileSystem.cacheDirectory ?? "";
       const permanentUri = `${baseDir}${fileName}`;
       await FileSystem.copyAsync({ from: video.uri, to: permanentUri });
       const fileInfo = await FileSystem.getInfoAsync(permanentUri);
       if (!fileInfo.exists) throw new Error("Video file missing");
-      setAttachments((prev) => [
-        ...prev,
-        { uri: permanentUri, type: "video", name: fileName, mimeType: "video/mp4" },
-      ]);
+      setAttachments((prev) => [...prev, { uri: permanentUri, type: "video", name: fileName, mimeType: "video/mp4" }]);
       setShowCamera(false);
     } catch { Alert.alert("Error", "Could not record video."); }
     finally { setIsVideoRecording(false); }
   };
 
   const stopVideoRecording = () => cameraRef.current?.stopRecording();
-
-  const handlePlayVoice = useCallback(async (url: string, msgId: string) => {
-    setAudioPlayer({ uri: buildUrl(url), name: "Voice Note" });
-  }, []);
 
   // ── Context menu ───────────────────────────────────────────
   const handleCopy = useCallback(() => {
@@ -3358,8 +3258,7 @@ const openLocalFile = async (localUri: string, name: string) => {
         onPress: async () => {
           try {
             const res = await fetch(`${BASE_URL}/api/parent-notes/messages/${msg.id}`, {
-              method: "DELETE",
-              headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+              method: "DELETE", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" ,"x-academic-year-id": await AsyncStorage.getItem("selectedYearId") ?? "16" },
             });
             if (res.ok) {
               setMessages((prev) => prev.filter((m) => m.id !== msg.id));
@@ -3375,7 +3274,7 @@ const openLocalFile = async (localUri: string, name: string) => {
     ]);
   }, [token, childId]);
 
-  const cancelEdit = useCallback(() => { setEditingMsg(null); setInputText(""); setSending(false); }, []);
+  const cancelEdit  = useCallback(() => { setEditingMsg(null); setInputText(""); setSending(false); }, []);
   const cancelReply = useCallback(() => setReplyTo(null), []);
 
   const scrollToMessage = useCallback((msgId: string) => {
@@ -3390,7 +3289,7 @@ const openLocalFile = async (localUri: string, name: string) => {
   const sendMessage = async () => {
     if (!inputText.trim() && attachments.length === 0) return;
     setSending(true);
-    const latestText = inputText.trim();
+    const latestText     = inputText.trim();
     const currentEditing = editingMsg;
 
     if (currentEditing) {
@@ -3399,20 +3298,18 @@ const openLocalFile = async (localUri: string, name: string) => {
       try {
         const res = await fetch(`${BASE_URL}/api/parent-notes/messages/${currentEditing.id}`, {
           method: "PATCH",
-          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" ,"x-academic-year-id": await AsyncStorage.getItem("selectedYearId") ?? "16" },
           body: JSON.stringify({ message: encodeURIComponent(latestText) }),
         });
-        if (res.ok) setMessages((prev) =>
-          prev.map((m) => m.id === currentEditing.id ? { ...m, text: latestText } : m)
-        );
+        if (res.ok) setMessages((prev) => prev.map((m) => m.id === currentEditing.id ? { ...m, text: latestText } : m));
         else Alert.alert("Error", "Could not edit message.");
       } catch { Alert.alert("Error", "Could not edit message."); }
       finally { setSending(false); }
       return;
     }
 
-    const sentText = inputText.trim();
-    const sentFiles = [...attachments];
+    const sentText    = inputText.trim();
+    const sentFiles   = [...attachments];
     const sentReplyTo = replyTo;
     setInputText("");
     setAttachments([]);
@@ -3422,11 +3319,11 @@ const openLocalFile = async (localUri: string, name: string) => {
     const tempMsg: Message = {
       id: String(Date.now()), text: sentText, sender: "parent",
       createdAt: new Date().toISOString(),
-      attachmentUrl: sentFiles[0]?.uri ?? undefined,
-      attachmentType: sentFiles[0]?.type ?? undefined,
-      attachmentName: sentFiles[0]?.name ?? undefined,
-      replyToId: sentReplyTo?.id,
-      replyToText: sentReplyTo?.text || (sentReplyTo?.attachmentName ? sentReplyTo.attachmentName : undefined),
+      attachmentUrl:  sentFiles[0]?.uri,
+      attachmentType: sentFiles[0]?.type,
+      attachmentName: sentFiles[0]?.name,
+      replyToId:   sentReplyTo?.id,
+      replyToText: sentReplyTo?.text || sentReplyTo?.attachmentName,
       status: "sending",
     };
     setMessages((prev) => [...prev, tempMsg]);
@@ -3439,11 +3336,11 @@ const openLocalFile = async (localUri: string, name: string) => {
           const f = sentFiles[i];
           const formData = new FormData();
           formData.append("student_id", String(Number(childId)));
-          if (i === 0 && sentText) formData.append("message", encodeURIComponent(sentText));
+          if (i === 0 && sentText)    formData.append("message",     encodeURIComponent(sentText));
           if (i === 0 && sentReplyTo) formData.append("reply_to_id", sentReplyTo.id);
           formData.append("attachment", { uri: f.uri, type: f.mimeType, name: f.name } as any);
           const res = await fetch(`${BASE_URL}/api/parent-notes/threads`, {
-            method: "POST", headers: { Authorization: `Bearer ${token}` }, body: formData,
+            method: "POST", headers: { Authorization: `Bearer ${token}`, "x-academic-year-id": await AsyncStorage.getItem("selectedYearId") ?? "16" }, body: formData,
           });
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const data = JSON.parse(await res.text());
@@ -3461,7 +3358,7 @@ const openLocalFile = async (localUri: string, name: string) => {
       } else {
         const res = await fetch(`${BASE_URL}/api/parent-notes/threads`, {
           method: "POST",
-          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "x-academic-year-id": await AsyncStorage.getItem("selectedYearId") ?? "16" },
           body: JSON.stringify({
             student_id: Number(childId),
             message: encodeURIComponent(sentText),
@@ -3485,9 +3382,7 @@ const openLocalFile = async (localUri: string, name: string) => {
         }
       }
 
-      setMessages((prev) =>
-        prev.map((m) => (m.id === tempMsg.id ? { ...m, status: "sent" } : m))
-      );
+      setMessages((prev) => prev.map((m) => m.id === tempMsg.id ? { ...m, status: "sent" } : m));
       await fetchMessages(token, finalThreadId ?? undefined);
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
     } catch {
@@ -3498,13 +3393,12 @@ const openLocalFile = async (localUri: string, name: string) => {
     }
   };
 
-  // ── Utilities ──────────────────────────────────────────────
+  // ── Derived data ───────────────────────────────────────────
   const getInitials = (name: string) => {
     const parts = (name ?? "").trim().split(" ");
     return parts.length >= 2 ? `${parts[0][0]}${parts[1][0]}`.toUpperCase() : (name ?? "U").substring(0, 2).toUpperCase();
   };
 
-  // ✅ FIX 1: For chat tab, still filter messages by query for inline highlighting
   const filteredMessages = searchQuery.trim()
     ? messages.filter((m) => m.text?.toLowerCase().includes(searchQuery.toLowerCase()))
     : messages;
@@ -3524,18 +3418,18 @@ const openLocalFile = async (localUri: string, name: string) => {
   };
 
   const mediaMessages = messages.filter((m) => m.attachmentUrl && (m.attachmentType === "image" || m.attachmentType === "video"));
-  const fileMessages = messages.filter((m) => m.attachmentUrl && m.attachmentType === "file" && !m.attachmentName?.includes("voice_") && !m.attachmentName?.endsWith(".m4a"));
+  const fileMessages  = messages.filter((m) => m.attachmentUrl && m.attachmentType === "file" && !m.attachmentName?.includes("voice_") && !m.attachmentName?.endsWith(".m4a"));
   const voiceMessages = messages.filter((m) => m.attachmentName?.endsWith(".m4a") || m.attachmentName?.includes("voice_") || m.attachmentUrl?.endsWith(".m4a") || m.attachmentUrl?.includes("voice_"));
   const pinnedMessages = messages.filter((m) => pinnedIds.includes(m.id));
 
-  // ── Render: single message ─────────────────────────────────
+  // ── Render message ─────────────────────────────────────────
   const renderMessage = ({ item }: { item: any }) => {
     if (item.type === "date") {
       return (
-        <View style={s.dateSeparator}>
-          <View style={s.dateLine} />
-          <Text style={s.dateLabel}>{item.label}</Text>
-          <View style={s.dateLine} />
+        <View style={styles.dateSeparator}>
+          <View style={styles.dateLine} />
+          <Text style={styles.dateLabel}>{item.label}</Text>
+          <View style={styles.dateLine} />
         </View>
       );
     }
@@ -3543,122 +3437,104 @@ const openLocalFile = async (localUri: string, name: string) => {
     const msg: Message = item;
     const isParent = msg.sender === "parent";
     const isPinned = pinnedIds.includes(msg.id);
-    const isVoice = msg.attachmentName?.endsWith(".m4a") || msg.attachmentName?.includes("voice_") || msg.attachmentUrl?.endsWith(".m4a") || msg.attachmentUrl?.includes("voice_");
-    const isVideo = msg.attachmentType === "video" || msg.attachmentName?.endsWith(".mp4") || msg.attachmentName?.includes("video_") || msg.attachmentUrl?.endsWith(".mp4");
-    const dlTint = isParent ? "rgba(255,255,255,0.85)" : PRIMARY;
+    const isVoice  = msg.attachmentName?.endsWith(".m4a") || msg.attachmentName?.includes("voice_") || msg.attachmentUrl?.endsWith(".m4a") || msg.attachmentUrl?.includes("voice_");
+    const isVideo  = msg.attachmentType === "video" || msg.attachmentName?.endsWith(".mp4") || msg.attachmentName?.includes("video_");
+    const dlTint   = isParent ? "rgba(255,255,255,0.85)" : PRIMARY;
 
     return (
       <Pressable onLongPress={() => setContextMsg(msg)} delayLongPress={350}>
-        <View style={[s.msgRow, isParent && s.msgRowRight]}>
+        <View style={[styles.msgRow, isParent && styles.msgRowRight]}>
           {!isParent && (
-            <View style={s.teacherAvatar}>
+            <View style={styles.teacherAvatar}>
               <Ionicons name="person" size={14} color={PRIMARY} />
             </View>
           )}
           <View style={{ maxWidth: "78%" }}>
             {isPinned && (
-              <View style={[s.pinRow, isParent && { alignSelf: "flex-end" }]}>
+              <View style={[styles.pinRow, isParent && { alignSelf: "flex-end" }]}>
                 <Ionicons name="pin" size={10} color="#F59E0B" />
-                <Text style={s.pinText}>Pinned</Text>
+                <Text style={styles.pinText}>Pinned</Text>
               </View>
             )}
-            {!isParent && <Text style={s.teacherLabel}>Teacher</Text>}
-            <View style={[s.bubble, isParent ? s.bubbleRight : s.bubbleLeft, isPinned && s.bubblePinned]}>
+            {!isParent && <Text style={styles.teacherLabel}>Teacher</Text>}
+            <View style={[styles.bubble, isParent ? styles.bubbleRight : styles.bubbleLeft, isPinned && styles.bubblePinned]}>
               {msg.replyToId && msg.replyToText && (
                 <TouchableOpacity
                   onPress={() => scrollToMessage(msg.replyToId!)}
-                  style={[s.replyRef, isParent ? s.replyRefRight : s.replyRefLeft]}
+                  style={[styles.replyRef, isParent ? styles.replyRefRight : styles.replyRefLeft]}
                 >
-                  <View style={s.replyRefBar} />
+                  <View style={styles.replyRefBar} />
                   <View style={{ flex: 1 }}>
-                    <Text style={[s.replyRefLabel, isParent && { color: "rgba(255,255,255,0.7)" }]}>Reply</Text>
-                    <Text style={[s.replyRefText, isParent && { color: "rgba(255,255,255,0.9)" }]} numberOfLines={1}>{msg.replyToText}</Text>
+                    <Text style={[styles.replyRefLabel, isParent && { color: "rgba(255,255,255,0.7)" }]}>Reply</Text>
+                    <Text style={[styles.replyRefText, isParent && { color: "rgba(255,255,255,0.9)" }]} numberOfLines={1}>{msg.replyToText}</Text>
                   </View>
                 </TouchableOpacity>
               )}
 
-              {!!msg.text && <Text selectable style={[s.msgText, isParent && { color: "#fff" }]}>{msg.text}</Text>}
+              {!!msg.text && <Text selectable style={[styles.msgText, isParent && { color: "#fff" }]}>{msg.text}</Text>}
 
-              {/* ✅ FIX 2: Image — uses buildUrl to ensure correct full URL */}
+              {/* Image */}
               {msg.attachmentType === "image" && msg.attachmentUrl && (
                 <TouchableOpacity onPress={() => openInApp(msg.attachmentUrl!, msg.attachmentName ?? "image.jpg")}>
-                  <Image
-                    source={{ uri: buildUrl(msg.attachmentUrl), headers: { Authorization: `Bearer ${token}` } }}
-                    style={s.attachedImage}
-                    resizeMode="cover"
-                  />
+                  <Image source={{ uri: buildUrl(msg.attachmentUrl) }} style={styles.attachedImage} resizeMode="cover" />
                 </TouchableOpacity>
               )}
 
-              {/* Video chip */}
+              {/* Video */}
               {isVideo && msg.attachmentUrl && (
-                <View style={[s.mediaChip, isParent && s.mediaChipRight]}>
+                <View style={[styles.mediaChip, isParent && styles.mediaChipRight]}>
                   <TouchableOpacity
                     style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}
                     onPress={() => openInApp(msg.attachmentUrl!, msg.attachmentName ?? "video.mp4")}
                   >
-                    <View style={s.videoThumb}>
+                    <View style={styles.videoThumb}>
                       <Ionicons name="play-circle" size={32} color="#fff" />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={[s.mediaChipText, isParent && { color: "#fff" }]}>Video</Text>
-                      <Text style={[s.mediaChipSub, isParent && { color: "rgba(255,255,255,0.6)" }]}>Tap to play</Text>
+                      <Text style={[styles.mediaChipText, isParent && { color: "#fff" }]}>Video</Text>
+                      <Text style={[styles.mediaChipSub, isParent && { color: "rgba(255,255,255,0.6)" }]}>Tap to play</Text>
                     </View>
                   </TouchableOpacity>
                   <DownloadIcon url={msg.attachmentUrl} name={msg.attachmentName ?? `video_${msg.id}.mp4`} type="video" tintColor={dlTint} />
                 </View>
               )}
 
-              {/* Voice chip */}
+              {/* Voice */}
               {isVoice && !isVideo && msg.attachmentUrl && (
                 <TouchableOpacity
-                  style={[s.voiceChip, isParent && s.voiceChipRight]}
+                  style={[styles.voiceChip, isParent && styles.voiceChipRight]}
                   onPress={() => openInApp(msg.attachmentUrl!, msg.attachmentName ?? "voice.m4a")}
                 >
                   <Ionicons name="play-circle" size={30} color={isParent ? "#fff" : PRIMARY} />
-                  <View style={s.waveform}>
-                    {[4, 8, 12, 6, 10, 14, 8, 5, 11, 7].map((h, i) => (
-                      <View key={i} style={[s.waveBar, { height: h, backgroundColor: isParent ? "rgba(255,255,255,0.7)" : `${PRIMARY}80` }]} />
+                  <View style={styles.waveform}>
+                    {[4,8,12,6,10,14,8,5,11,7].map((h, i) => (
+                      <View key={i} style={[styles.waveBar, { height: h, backgroundColor: isParent ? "rgba(255,255,255,0.7)" : `${PRIMARY}80` }]} />
                     ))}
                   </View>
-                  <Text style={[s.voiceLabel, isParent && { color: "rgba(255,255,255,0.8)" }]}>Voice note</Text>
+                  <Text style={[styles.voiceLabel, isParent && { color: "rgba(255,255,255,0.8)" }]}>Voice note</Text>
                 </TouchableOpacity>
               )}
 
-              {/* File chip */}
-             {msg.attachmentType === "file" && !isVoice && !isVideo && msg.attachmentUrl && (
-  <View style={[s.fileChip, isParent && s.fileChipRight]}>
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}>
-      <View style={[s.fileIconBox, { backgroundColor: isParent ? "rgba(255,255,255,0.2)" : "#EEF3FF" }]}>
-        <Ionicons name="document-outline" size={20} color={isParent ? "#fff" : PRIMARY} />
-      </View>
-      <TouchableOpacity
-        style={{ flex: 1 }}
-        onPress={() => openInApp(buildUrl(msg.attachmentUrl!), msg.attachmentName ?? "file")}
-      >
-        <Text style={[s.fileName, isParent && { color: "#fff" }]} numberOfLines={1}>
-          {msg.attachmentName ?? "File"}
-        </Text>
-        <Text style={[s.fileSub, isParent && { color: "rgba(255,255,255,0.6)" }]}>
-          {downloads[msg.attachmentUrl] === "downloading"
-            ? "Downloading..."
-            : downloads[msg.attachmentUrl] === "done"
-            ? "✓ Saved offline"
-            : "Tap to open"}
-        </Text>
-      </TouchableOpacity>
-      <DownloadIcon
-        url={msg.attachmentUrl}
-        name={msg.attachmentName ?? `file_${msg.id}`}
-        type="file"
-        tintColor={dlTint}
-      />
-    </View>
-  </View>
-)}
+              {/* File */}
+              {msg.attachmentType === "file" && !isVoice && !isVideo && msg.attachmentUrl && (
+                <View style={[styles.fileChip, isParent && styles.fileChipRight]}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}>
+                    <View style={[styles.fileIconBox, { backgroundColor: isParent ? "rgba(255,255,255,0.2)" : "#EEF3FF" }]}>
+                      <Ionicons name="document-outline" size={20} color={isParent ? "#fff" : PRIMARY} />
+                    </View>
+                    <TouchableOpacity style={{ flex: 1 }} onPress={() => openInApp(buildUrl(msg.attachmentUrl!), msg.attachmentName ?? "file")}>
+                      <Text style={[styles.fileName, isParent && { color: "#fff" }]} numberOfLines={1}>{msg.attachmentName ?? "File"}</Text>
+                      <Text style={[styles.fileSub, isParent && { color: "rgba(255,255,255,0.6)" }]}>
+                        {downloads[msg.attachmentUrl] === "downloading" ? "Downloading..." : downloads[msg.attachmentUrl] === "done" ? "✓ Saved offline" : "Tap to open"}
+                      </Text>
+                    </TouchableOpacity>
+                    <DownloadIcon url={msg.attachmentUrl} name={msg.attachmentName ?? `file_${msg.id}`} type="file" tintColor={dlTint} />
+                  </View>
+                </View>
+              )}
 
-              <View style={[s.timeRow, isParent && { justifyContent: "flex-end" }]}>
-                <Text style={[s.timeText, isParent && { color: "rgba(255,255,255,0.6)" }]}>{formatTime(msg.createdAt)}</Text>
+              <View style={[styles.timeRow, isParent && { justifyContent: "flex-end" }]}>
+                <Text style={[styles.timeText, isParent && { color: "rgba(255,255,255,0.6)" }]}>{formatTime(msg.createdAt)}</Text>
                 {isParent && <StatusTick status={msg.status} />}
               </View>
             </View>
@@ -3668,201 +3544,136 @@ const openLocalFile = async (localUri: string, name: string) => {
     );
   };
 
-  // ── Render: Media gallery tab ──────────────────────────────
-const renderMediaGallery = () => (
-  <View style={{ flex: 1, backgroundColor: "#F0F4FB" }}>
-    <View style={s.subTabBar}>
-      <TouchableOpacity style={[s.subTab, mediaSubTab === "photos" && s.subTabActive]} onPress={() => setMediaSubTab("photos")}>
-        <Ionicons name="images-outline" size={14} color={mediaSubTab === "photos" ? "#fff" : "#6B7280"} />
-        <Text style={[s.subTabText, mediaSubTab === "photos" && s.subTabTextActive]}>
-          Photos & Videos{mediaMessages.length > 0 ? ` (${mediaMessages.length})` : ""}
-        </Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={[s.subTab, mediaSubTab === "docs" && s.subTabActive]} onPress={() => setMediaSubTab("docs")}>
-        <Ionicons name="document-outline" size={14} color={mediaSubTab === "docs" ? "#fff" : "#6B7280"} />
-        <Text style={[s.subTabText, mediaSubTab === "docs" && s.subTabTextActive]}>
-          Files & Voice{fileMessages.length + voiceMessages.length > 0 ? ` (${fileMessages.length + voiceMessages.length})` : ""}
-        </Text>
-      </TouchableOpacity>
+  // ── Media gallery tab ──────────────────────────────────────
+  const renderMediaGallery = () => (
+    <View style={{ flex: 1, backgroundColor: "#F0F4FB" }}>
+      <View style={styles.subTabBar}>
+        <TouchableOpacity style={[styles.subTab, mediaSubTab === "photos" && styles.subTabActive]} onPress={() => setMediaSubTab("photos")}>
+          <Ionicons name="images-outline" size={14} color={mediaSubTab === "photos" ? "#fff" : "#6B7280"} />
+          <Text style={[styles.subTabText, mediaSubTab === "photos" && styles.subTabTextActive]}>
+            Photos & Videos{mediaMessages.length > 0 ? ` (${mediaMessages.length})` : ""}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.subTab, mediaSubTab === "docs" && styles.subTabActive]} onPress={() => setMediaSubTab("docs")}>
+          <Ionicons name="document-outline" size={14} color={mediaSubTab === "docs" ? "#fff" : "#6B7280"} />
+          <Text style={[styles.subTabText, mediaSubTab === "docs" && styles.subTabTextActive]}>
+            Files & Voice{fileMessages.length + voiceMessages.length > 0 ? ` (${fileMessages.length + voiceMessages.length})` : ""}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {mediaSubTab === "photos" && (
+        <ScrollView
+          contentContainerStyle={styles.paneScroll}
+          showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshingMedia} onRefresh={handleRefreshMedia} colors={[PRIMARY]} tintColor={PRIMARY} />}
+        >
+          {mediaMessages.length === 0 ? (
+            <View style={styles.empty}>
+              <View style={styles.emptyIconWrap}><Ionicons name="images-outline" size={36} color={PRIMARY} /></View>
+              <Text style={styles.emptyTitle}>No photos or videos yet</Text>
+              <Text style={styles.emptySub}>Media shared in this chat will appear here.</Text>
+            </View>
+          ) : (
+            <View style={styles.grid}>
+              {mediaMessages.map((m) => (
+                <TouchableOpacity
+                  key={m.id} style={styles.thumb} activeOpacity={0.85}
+                  onPress={() => openInApp(buildUrl(m.attachmentUrl!), m.attachmentName ?? (m.attachmentType === "video" ? "video.mp4" : "image.jpg"))}
+                >
+                  <Image source={{ uri: buildUrl(m.attachmentUrl!) }} style={styles.thumbImg} resizeMode="cover" />
+                  {m.attachmentType === "video" && (
+                    <View style={styles.playOverlay}><Ionicons name="play-circle" size={30} color="#fff" /></View>
+                  )}
+                  {m.attachmentType === "video" && m.attachmentUrl && (
+                    <TouchableOpacity style={styles.thumbDlBtn} onPress={() => downloadFile(m.attachmentUrl!, m.attachmentName ?? `video_${m.id}.mp4`, "video")}>
+                      {downloads[m.attachmentUrl] === "downloading"
+                        ? <ActivityIndicator size="small" color="#fff" />
+                        : <Ionicons name={downloads[m.attachmentUrl] === "done" ? "checkmark-circle" : "arrow-down-circle"} size={18} color={downloads[m.attachmentUrl] === "done" ? "#22C55E" : "#fff"} />
+                      }
+                    </TouchableOpacity>
+                  )}
+                  <Text style={styles.thumbTime}>{formatTime(m.createdAt)}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+        </ScrollView>
+      )}
+
+      {mediaSubTab === "docs" && (
+        <ScrollView
+          contentContainerStyle={styles.paneScroll}
+          showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshingMedia} onRefresh={handleRefreshMedia} colors={[PRIMARY]} tintColor={PRIMARY} />}
+        >
+          {fileMessages.length === 0 && voiceMessages.length === 0 ? (
+            <View style={styles.empty}>
+              <View style={styles.emptyIconWrap}><Ionicons name="document-outline" size={36} color={PRIMARY} /></View>
+              <Text style={styles.emptyTitle}>No files or voice notes yet</Text>
+              <Text style={styles.emptySub}>Documents and voice messages will appear here.</Text>
+            </View>
+          ) : (
+            <>
+              {fileMessages.length > 0 && (
+                <View style={styles.section}>
+                  <TouchableOpacity style={styles.sectionHeader} onPress={() => setFilesExpanded((v) => !v)} activeOpacity={0.7}>
+                    <View style={styles.sectionHeaderLeft}>
+                      <View style={[styles.sectionDot, { backgroundColor: PRIMARY }]} />
+                      <Text style={styles.sectionTitle}>Files</Text>
+                      <View style={styles.sectionBadge}><Text style={styles.sectionBadgeText}>{fileMessages.length}</Text></View>
+                    </View>
+                    <Ionicons name={filesExpanded ? "chevron-up" : "chevron-down"} size={16} color="#9CA3AF" />
+                  </TouchableOpacity>
+                  {filesExpanded && fileMessages.map((m) => (
+                    <TouchableOpacity key={m.id} style={styles.fileRow} activeOpacity={0.75} onPress={() => openInApp(buildUrl(m.attachmentUrl!), m.attachmentName ?? "file")}>
+                      <View style={[styles.fileIconBox, { backgroundColor: "#EEF3FF" }]}>
+                        <Ionicons name="document-outline" size={20} color={PRIMARY} />
+                      </View>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={styles.fileName} numberOfLines={1}>{m.attachmentName ?? "File"}</Text>
+                        <Text style={styles.fileMeta}>{m.sender === "teacher" ? "From Teacher" : "Sent by you"} · {formatTime(m.createdAt)}</Text>
+                      </View>
+                      <DownloadIcon url={m.attachmentUrl!} name={m.attachmentName ?? `file_${m.id}`} type="file" tintColor={PRIMARY} />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+
+              {voiceMessages.length > 0 && (
+                <View style={styles.section}>
+                  <TouchableOpacity style={styles.sectionHeader} onPress={() => setVoiceExpanded((v) => !v)} activeOpacity={0.7}>
+                    <View style={styles.sectionHeaderLeft}>
+                      <View style={[styles.sectionDot, { backgroundColor: "#7C3AED" }]} />
+                      <Text style={styles.sectionTitle}>Voice Notes</Text>
+                      <View style={[styles.sectionBadge, { backgroundColor: "#EDE9FE" }]}>
+                        <Text style={[styles.sectionBadgeText, { color: "#7C3AED" }]}>{voiceMessages.length}</Text>
+                      </View>
+                    </View>
+                    <Ionicons name={voiceExpanded ? "chevron-up" : "chevron-down"} size={16} color="#9CA3AF" />
+                  </TouchableOpacity>
+                  {voiceExpanded && voiceMessages.map((m) => (
+                    <TouchableOpacity key={m.id} style={styles.fileRow} activeOpacity={0.75} onPress={() => openInApp(buildUrl(m.attachmentUrl!), m.attachmentName ?? "voice.m4a")}>
+                      <View style={[styles.fileIconBox, { backgroundColor: "#F5F3FF" }]}>
+                        <Ionicons name="mic" size={20} color="#7C3AED" />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.fileName}>Voice note</Text>
+                        <Text style={styles.fileMeta}>{m.sender === "teacher" ? "From Teacher" : "Sent by you"} · {formatTime(m.createdAt)}</Text>
+                      </View>
+                      <View style={styles.playBtn}><Ionicons name="play" size={14} color="#7C3AED" /></View>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </>
+          )}
+        </ScrollView>
+      )}
     </View>
+  );
 
-    {mediaSubTab === "photos" && (
-      <ScrollView
-        contentContainerStyle={s.paneScroll}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshingMedia}
-            onRefresh={handleRefresh}
-            colors={[PRIMARY]}
-            tintColor={PRIMARY}
-          />
-        }
-      >
-        {mediaMessages.length === 0 ? (
-          <View style={s.empty}>
-            <View style={s.emptyIconWrap}>
-              <Ionicons name="images-outline" size={36} color={PRIMARY} />
-            </View>
-            <Text style={s.emptyTitle}>No photos or videos yet</Text>
-            <Text style={s.emptySub}>Media shared in this chat will appear here.</Text>
-          </View>
-        ) : (
-          <View style={s.grid}>
-            {mediaMessages.map((m) => (
-              <TouchableOpacity
-                key={m.id}
-                style={s.thumb}
-                activeOpacity={0.85}
-                onPress={() => openInApp(buildUrl(m.attachmentUrl!), m.attachmentName ?? (m.attachmentType === "video" ? "video.mp4" : "image.jpg"))}
-              >
-                <Image
-                  source={{ uri: buildUrl(m.attachmentUrl!), headers: { Authorization: `Bearer ${token}` } }}
-                  style={s.thumbImg}
-                  resizeMode="cover"
-                />
-                {m.attachmentType === "video" && (
-                  <View style={s.playOverlay}>
-                    <Ionicons name="play-circle" size={30} color="#fff" />
-                  </View>
-                )}
-                {m.attachmentType === "video" && m.attachmentUrl && (
-                  <TouchableOpacity
-                    style={s.thumbDlBtn}
-                    onPress={() => downloadFile(m.attachmentUrl!, m.attachmentName ?? `video_${m.id}.mp4`, "video")}
-                  >
-                    {downloads[m.attachmentUrl] === "downloading" ? (
-                      <ActivityIndicator size="small" color="#fff" />
-                    ) : (
-                      <Ionicons
-                        name={downloads[m.attachmentUrl] === "done" ? "checkmark-circle" : "arrow-down-circle"}
-                        size={18}
-                        color={downloads[m.attachmentUrl] === "done" ? "#22C55E" : "#fff"}
-                      />
-                    )}
-                  </TouchableOpacity>
-                )}
-                <Text style={s.thumbTime}>{formatTime(m.createdAt)}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
-      </ScrollView>
-    )}
-
-    {mediaSubTab === "docs" && (
-      <ScrollView
-        contentContainerStyle={s.paneScroll}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshingMedia}
-            onRefresh={handleRefresh}
-            colors={[PRIMARY]}
-            tintColor={PRIMARY}
-          />
-        }
-      >
-        {fileMessages.length === 0 && voiceMessages.length === 0 ? (
-          <View style={s.empty}>
-            <View style={s.emptyIconWrap}>
-              <Ionicons name="document-outline" size={36} color={PRIMARY} />
-            </View>
-            <Text style={s.emptyTitle}>No files or voice notes yet</Text>
-            <Text style={s.emptySub}>Documents and voice messages will appear here.</Text>
-          </View>
-        ) : (
-          <>
-            {fileMessages.length > 0 && (
-              <View style={s.section}>
-                <TouchableOpacity
-                  style={s.sectionHeader}
-                  onPress={() => setFilesExpanded((v) => !v)}
-                  activeOpacity={0.7}
-                >
-                  <View style={s.sectionHeaderLeft}>
-                    <View style={[s.sectionDot, { backgroundColor: PRIMARY }]} />
-                    <Text style={s.sectionTitle}>Files</Text>
-                    <View style={s.sectionBadge}>
-                      <Text style={s.sectionBadgeText}>{fileMessages.length}</Text>
-                    </View>
-                  </View>
-                  <Ionicons name={filesExpanded ? "chevron-up" : "chevron-down"} size={16} color="#9CA3AF" />
-                </TouchableOpacity>
-                {filesExpanded && fileMessages.map((m) => (
-                  <TouchableOpacity
-                    key={m.id}
-                    style={s.fileRow}
-                    activeOpacity={0.75}
-                    onPress={() => openInApp(buildUrl(m.attachmentUrl!), m.attachmentName ?? "file")}
-                  >
-                    <View style={[s.fileIconBox, { backgroundColor: "#EEF3FF" }]}>
-                      <Ionicons name="document-outline" size={20} color={PRIMARY} />
-                    </View>
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text style={s.fileName} numberOfLines={1}>{m.attachmentName ?? "File"}</Text>
-                      <Text style={s.fileMeta}>
-                        {m.sender === "teacher" ? "From Teacher" : "Sent by you"} · {formatTime(m.createdAt)}
-                      </Text>
-                    </View>
-                    <DownloadIcon
-                      url={m.attachmentUrl!}
-                      name={m.attachmentName ?? `file_${m.id}`}
-                      type="file"
-                      tintColor={PRIMARY}
-                    />
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-
-            {voiceMessages.length > 0 && (
-              <View style={s.section}>
-                <TouchableOpacity
-                  style={s.sectionHeader}
-                  onPress={() => setVoiceExpanded((v) => !v)}
-                  activeOpacity={0.7}
-                >
-                  <View style={s.sectionHeaderLeft}>
-                    <View style={[s.sectionDot, { backgroundColor: "#7C3AED" }]} />
-                    <Text style={s.sectionTitle}>Voice Notes</Text>
-                    <View style={[s.sectionBadge, { backgroundColor: "#EDE9FE" }]}>
-                      <Text style={[s.sectionBadgeText, { color: "#7C3AED" }]}>{voiceMessages.length}</Text>
-                    </View>
-                  </View>
-                  <Ionicons name={voiceExpanded ? "chevron-up" : "chevron-down"} size={16} color="#9CA3AF" />
-                </TouchableOpacity>
-                {voiceExpanded && voiceMessages.map((m) => (
-                  <TouchableOpacity
-                    key={m.id}
-                    style={s.fileRow}
-                    activeOpacity={0.75}
-                    onPress={() => openInApp(buildUrl(m.attachmentUrl!), m.attachmentName ?? "voice.m4a")}
-                  >
-                    <View style={[s.fileIconBox, { backgroundColor: "#F5F3FF" }]}>
-                      <Ionicons name="mic" size={20} color="#7C3AED" />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={s.fileName}>Voice note</Text>
-                      <Text style={s.fileMeta}>
-                        {m.sender === "teacher" ? "From Teacher" : "Sent by you"} · {formatTime(m.createdAt)}
-                      </Text>
-                    </View>
-                    <View style={s.playBtn}>
-                      <Ionicons name="play" size={14} color="#7C3AED" />
-                    </View>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-          </>
-        )}
-      </ScrollView>
-    )}
-  </View>
-);
-
-  // ✅ FIX 3: Downloads tab — open files in-app, no share sheet
+  // ── Downloads tab ──────────────────────────────────────────
   const renderDownloads = () => {
     const formatSize = (bytes?: number) => {
       if (!bytes) return "";
@@ -3876,44 +3687,22 @@ const renderMediaGallery = () => (
       return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) +
         " · " + d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
     };
-const openDownloadedFile = async (file: DownloadedFile) => {
-  try {
-    const info = await FileSystem.getInfoAsync(file.localUri);
 
-    if (!info.exists) {
-      Alert.alert(
-        "File not found",
-        "This file was cleared from device storage.",
-        [
-          { text: "Remove from list", onPress: () => removeSavedFile(file.key), style: "destructive" },
-          { text: "OK", style: "cancel" },
-        ]
-      );
-      return;
-    }
-
-    const n = file.name.toLowerCase();
-    const isVideo = n.endsWith(".mp4") || file.type === "video";
-    const isVoice = n.endsWith(".m4a") || n.includes("voice_");
-    const isImage = ["jpg", "jpeg", "png", "gif", "webp"].includes(n.split(".").pop() ?? "");
-
-    if (isVideo) {
-      setPreviewVideo(file.localUri);
-    } else if (isVoice) {
-      setAudioPlayer({ uri: file.localUri, name: file.name });
-    } else if (isImage) {
-      setPreviewItem({ uri: file.localUri, type: "image", name: file.name });
-    } else {
-      // ✅ FIX: Delegate to openLocalFile which correctly handles
-      // Android (file:// → content:// via getContentUriAsync + IntentLauncher)
-      // and iOS (WebBrowser handles file:// fine)
-      await openLocalFile(file.localUri, file.name);
-    }
-  } catch (err: any) {
-    console.error("[openDownloadedFile] error:", err);
-    Alert.alert("Error", `Could not open file: ${err?.message ?? "unknown error"}`);
-  }
-};
+    const openDownloadedFile = async (file: DownloadedFile) => {
+      try {
+        const info = await FileSystem.getInfoAsync(file.localUri);
+        if (!info.exists) {
+          Alert.alert("File not found", "This file was cleared from device storage.", [
+            { text: "Remove from list", onPress: () => removeSavedFile(file.key), style: "destructive" },
+            { text: "OK", style: "cancel" },
+          ]);
+          return;
+        }
+        await openLocalFile(file.localUri, file.name);
+      } catch (err: any) {
+        Alert.alert("Error", `Could not open file: ${err?.message ?? "unknown error"}`);
+      }
+    };
 
     const deleteFile = (file: DownloadedFile) => {
       Alert.alert("Remove Download", `Remove "${file.name}" from Downloads?`, [
@@ -3931,45 +3720,61 @@ const openDownloadedFile = async (file: DownloadedFile) => {
       ]);
     };
 
+    // FIX: refreshControl on BOTH empty and non-empty states
+    const refreshControl = (
+      <RefreshControl
+        refreshing={refreshingDownloads}
+        onRefresh={handleRefreshDownloads}
+        colors={[PRIMARY]}
+        tintColor={PRIMARY}
+      />
+    );
+
     if (savedFiles.length === 0) {
       return (
-        <View style={[s.emptyGallery, { marginTop: 60 }]}>
-          <View style={s.dlEmptyIconWrap}><Ionicons name="cloud-download-outline" size={40} color={PRIMARY} /></View>
-          <Text style={s.emptyGalleryTitle}>No downloads yet</Text>
-          <Text style={s.emptyGalleryText}>Files and videos you download from chat will appear here for offline access.</Text>
-        </View>
+        <ScrollView contentContainerStyle={{ flexGrow: 1 }} refreshControl={refreshControl}>
+          <View style={[styles.emptyGallery, { marginTop: 60 }]}>
+            <View style={styles.dlEmptyIconWrap}><Ionicons name="cloud-download-outline" size={40} color={PRIMARY} /></View>
+            <Text style={styles.emptyGalleryTitle}>No downloads yet</Text>
+            <Text style={styles.emptyGalleryText}>Files and videos you download from chat will appear here for offline access.</Text>
+          </View>
+        </ScrollView>
       );
     }
 
     return (
-      <ScrollView contentContainerStyle={[s.galleryScroll, { paddingBottom: 40 }]} showsVerticalScrollIndicator={false}>
-        <View style={s.dlHeader}>
-          <View style={s.dlHeaderLeft}>
+      <ScrollView
+        contentContainerStyle={[styles.galleryScroll, { paddingBottom: 40 }]}
+        showsVerticalScrollIndicator={false}
+        refreshControl={refreshControl}
+      >
+        <View style={styles.dlHeader}>
+          <View style={styles.dlHeaderLeft}>
             <Ionicons name="cloud-download" size={18} color={PRIMARY} />
-            <Text style={s.dlHeaderTitle}>{savedFiles.length} downloaded item{savedFiles.length !== 1 ? "s" : ""}</Text>
+            <Text style={styles.dlHeaderTitle}>{savedFiles.length} downloaded item{savedFiles.length !== 1 ? "s" : ""}</Text>
           </View>
-          <Text style={s.dlHeaderSub}>Tap to open</Text>
+          <Text style={styles.dlHeaderSub}>Tap to open · Pull to refresh</Text>
         </View>
 
         {savedFiles.map((file) => (
-          <View key={file.key} style={s.dlRow}>
-            <View style={[s.dlIconBox, { backgroundColor: file.type === "video" ? "#1F2937" : "#EEF3FF" }]}>
+          <View key={file.key} style={styles.dlRow}>
+            <View style={[styles.dlIconBox, { backgroundColor: file.type === "video" ? "#1F2937" : "#EEF3FF" }]}>
               <Ionicons name={file.type === "video" ? "videocam" : "document-outline"} size={22} color={file.type === "video" ? "#fff" : PRIMARY} />
             </View>
             <TouchableOpacity style={{ flex: 1 }} onPress={() => openDownloadedFile(file)}>
-              <Text style={s.dlName} numberOfLines={1}>{file.name}</Text>
-              <Text style={s.dlMeta}>
+              <Text style={styles.dlName} numberOfLines={1}>{file.name}</Text>
+              <Text style={styles.dlMeta}>
                 {file.type === "video" ? "Video" : "Document"}
                 {file.size ? `  ·  ${formatSize(file.size)}` : ""}
                 {"  ·  "}{formatSavedDate(file.savedAt)}
               </Text>
-              <View style={s.dlOfflineBadge}>
+              <View style={styles.dlOfflineBadge}>
                 <Ionicons name="checkmark-circle" size={11} color="#16A34A" />
-                <Text style={s.dlOfflineText}>Available offline</Text>
+                <Text style={styles.dlOfflineText}>Available offline</Text>
               </View>
             </TouchableOpacity>
-            <View style={s.dlActions}>
-              <TouchableOpacity onPress={() => deleteFile(file)} style={s.dlActionBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <View style={styles.dlActions}>
+              <TouchableOpacity onPress={() => deleteFile(file)} style={styles.dlActionBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                 <Ionicons name="trash-outline" size={19} color="#EF4444" />
               </TouchableOpacity>
             </View>
@@ -3981,41 +3786,32 @@ const openDownloadedFile = async (file: DownloadedFile) => {
 
   // ── JSX ────────────────────────────────────────────────────
   return (
-    <SafeAreaView style={s.safe}>
+    <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={PRIMARY} />
 
-      {/* Loading overlay for file opening */}
-      {fileOpeningLoading && (
-        <View style={s.fileLoadingOverlay}>
-          <ActivityIndicator size="large" color="#fff" />
-          <Text style={s.fileLoadingText}>Opening file...</Text>
-        </View>
-      )}
-
       {/* Header */}
-      <View style={[s.header, { backgroundColor: PRIMARY }]}>
-        <TouchableOpacity onPress={() => router.back()} style={s.headerBtn}>
+      <View style={[styles.header, { backgroundColor: PRIMARY }]}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.headerBtn}>
           <Ionicons name="arrow-back-outline" size={20} color="#fff" />
         </TouchableOpacity>
-        <View style={s.headerCenter}>
-          <View style={s.headerAvatar}>
-            <Text style={s.headerAvatarText}>{getInitials(childName ?? "")}</Text>
+        <View style={styles.headerCenter}>
+          <View style={styles.headerAvatar}>
+            <Text style={styles.headerAvatarText}>{getInitials(childName ?? "")}</Text>
           </View>
           <View>
-            <Text style={s.headerName}>{childName}</Text>
-            <Text style={s.headerSub}>{classname}{sectionname ? ` · ${sectionname}` : ""}</Text>
+            <Text style={styles.headerName}>{childName}</Text>
+            <Text style={styles.headerSub}>{classname}{sectionname ? ` · ${sectionname}` : ""}</Text>
           </View>
         </View>
-        <View style={s.headerActions}>
-          {/* ✅ FIX 1: Search icon now triggers global search */}
+        <View style={styles.headerActions}>
           <TouchableOpacity
-            style={s.headerBtn}
+            style={styles.headerBtn}
             onPress={() => { setShowSearch((v) => !v); setSearchQuery(""); setShowGlobalResults(false); }}
           >
             <Ionicons name={showSearch ? "close-outline" : "search-outline"} size={20} color="#fff" />
           </TouchableOpacity>
           <TouchableOpacity
-            style={s.headerBtn}
+            style={styles.headerBtn}
             onPress={() => setActiveTab((t) => (t === "chat" ? "media" : "chat"))}
           >
             <Ionicons name={activeTab === "chat" ? "images-outline" : "chatbubbles-outline"} size={20} color="#fff" />
@@ -4024,15 +3820,14 @@ const openDownloadedFile = async (file: DownloadedFile) => {
       </View>
 
       {/* Tab bar */}
-      <View style={s.tabBar}>
+      <View style={styles.tabBar}>
         {(["chat", "media", "downloads"] as TabType[]).map((tab) => (
-          <TouchableOpacity key={tab} style={[s.tab, activeTab === tab && s.tabActive]} onPress={() => setActiveTab(tab)}>
+          <TouchableOpacity key={tab} style={[styles.tab, activeTab === tab && styles.tabActive]} onPress={() => setActiveTab(tab)}>
             <Ionicons
               name={tab === "chat" ? "chatbubbles-outline" : tab === "media" ? "images-outline" : "cloud-download-outline"}
-              size={15}
-              color={activeTab === tab ? PRIMARY : "#9CA3AF"}
+              size={15} color={activeTab === tab ? PRIMARY : "#9CA3AF"}
             />
-            <Text style={[s.tabText, activeTab === tab && s.tabTextActive]}>
+            <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
               {tab === "chat" ? "Chat" :
                tab === "media" ? `Media${mediaMessages.length + fileMessages.length + voiceMessages.length > 0 ? ` (${mediaMessages.length + fileMessages.length + voiceMessages.length})` : ""}` :
                `Downloads${savedFiles.length > 0 ? ` (${savedFiles.length})` : ""}`}
@@ -4041,20 +3836,16 @@ const openDownloadedFile = async (file: DownloadedFile) => {
         ))}
       </View>
 
-      {/* ✅ FIX 1: Global search bar — searches across everything */}
+      {/* Search bar */}
       {showSearch && (
-        <View style={s.searchBar}>
+        <View style={styles.searchBar}>
           <Ionicons name="search-outline" size={16} color="#9CA3AF" />
           <TextInput
-            style={s.searchInput}
+            style={styles.searchInput}
             placeholder="Search messages, files, media..."
             placeholderTextColor="#9CA3AF"
             value={searchQuery}
-            onChangeText={(text) => {
-              setSearchQuery(text);
-              if (text.trim()) setShowGlobalResults(true);
-              else setShowGlobalResults(false);
-            }}
+            onChangeText={(text) => { setSearchQuery(text); setShowGlobalResults(!!text.trim()); }}
             autoFocus
           />
           {searchQuery.length > 0 && (
@@ -4062,11 +3853,8 @@ const openDownloadedFile = async (file: DownloadedFile) => {
               <TouchableOpacity onPress={() => { setSearchQuery(""); setShowGlobalResults(false); }}>
                 <Ionicons name="close-circle" size={16} color="#9CA3AF" />
               </TouchableOpacity>
-              <TouchableOpacity
-                style={s.searchResultsBtn}
-                onPress={() => setShowGlobalResults(true)}
-              >
-                <Text style={s.searchCount}>{globalSearchResults.length} results</Text>
+              <TouchableOpacity style={styles.searchResultsBtn} onPress={() => setShowGlobalResults(true)}>
+                <Text style={styles.searchCount}>{globalSearchResults.length} results</Text>
                 <Ionicons name="chevron-forward" size={12} color={PRIMARY} />
               </TouchableOpacity>
             </>
@@ -4076,12 +3864,12 @@ const openDownloadedFile = async (file: DownloadedFile) => {
 
       {/* Pinned banner */}
       {pinnedMessages.length > 0 && activeTab === "chat" && (
-        <View style={s.pinnedBanner}>
+        <View style={styles.pinnedBanner}>
           <Ionicons name="pin" size={12} color="#92400E" />
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1, marginLeft: 8 }}>
             {pinnedMessages.map((m) => (
-              <TouchableOpacity key={m.id} style={s.pinnedChip} onPress={() => scrollToMessage(m.id)}>
-                <Text style={s.pinnedChipText} numberOfLines={1}>
+              <TouchableOpacity key={m.id} style={styles.pinnedChip} onPress={() => scrollToMessage(m.id)}>
+                <Text style={styles.pinnedChipText} numberOfLines={1}>
                   {m.text || (m.attachmentName?.includes("voice_") ? "Voice note" : "Attachment")}
                 </Text>
               </TouchableOpacity>
@@ -4091,20 +3879,13 @@ const openDownloadedFile = async (file: DownloadedFile) => {
       )}
 
       {/* Tab content */}
-      {activeTab === "media" ? (
-        renderMediaGallery()
-      ) : activeTab === "downloads" ? (
-        renderDownloads()
-      ) : (
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          keyboardVerticalOffset={0}
-        >
+      {activeTab === "media" ? renderMediaGallery() :
+       activeTab === "downloads" ? renderDownloads() : (
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={0}>
           {loading ? (
-            <View style={s.loadingWrap}>
+            <View style={styles.loadingWrap}>
               <ActivityIndicator size="large" color={PRIMARY} />
-              <Text style={s.loadingText}>Loading messages...</Text>
+              <Text style={styles.loadingText}>Loading messages...</Text>
             </View>
           ) : (
             <FlatList
@@ -4113,67 +3894,65 @@ const openDownloadedFile = async (file: DownloadedFile) => {
               keyExtractor={(item) => (item as any).id}
               renderItem={renderMessage}
               removeClippedSubviews
-              contentContainerStyle={s.list}
+              contentContainerStyle={styles.list}
               onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
               onScrollToIndexFailed={(info) =>
                 setTimeout(() => flatListRef.current?.scrollToIndex({ index: info.index, animated: true }), 300)
               }
               onTouchStart={() => { if (showEmojiPicker) setShowEmojiPicker(false); }}
               ListEmptyComponent={
-                <View style={s.emptyWrap}>
-                  <View style={s.emptyIconWrap}><Ionicons name="chatbubbles-outline" size={40} color={PRIMARY} /></View>
-                  <Text style={s.emptyTitle}>No messages yet</Text>
-                  <Text style={s.emptySub}>Send a note to the teacher below</Text>
+                <View style={styles.emptyWrap}>
+                  <View style={styles.emptyIconWrap}><Ionicons name="chatbubbles-outline" size={40} color={PRIMARY} /></View>
+                  <Text style={styles.emptyTitle}>No messages yet</Text>
+                  <Text style={styles.emptySub}>Send a note to the teacher below</Text>
                 </View>
               }
             />
           )}
 
           {replyTo && (
-            <View style={s.replyBanner}>
-              <View style={s.replyBannerBar} />
+            <View style={styles.replyBanner}>
+              <View style={styles.replyBannerBar} />
               <View style={{ flex: 1 }}>
-                <Text style={s.replyBannerLabel}>Replying to {replyTo.sender === "teacher" ? "Teacher" : "yourself"}</Text>
-                <Text style={s.replyBannerText} numberOfLines={1}>{replyTo.text || (replyTo.attachmentName ? replyTo.attachmentName : "Attachment")}</Text>
+                <Text style={styles.replyBannerLabel}>Replying to {replyTo.sender === "teacher" ? "Teacher" : "yourself"}</Text>
+                <Text style={styles.replyBannerText} numberOfLines={1}>{replyTo.text || replyTo.attachmentName || "Attachment"}</Text>
               </View>
-              <TouchableOpacity onPress={cancelReply} style={s.replyClose}>
+              <TouchableOpacity onPress={cancelReply} style={styles.replyClose}>
                 <Ionicons name="close" size={18} color="#6B7280" />
               </TouchableOpacity>
             </View>
           )}
 
           {editingMsg && (
-            <View style={[s.replyBanner, s.editBanner]}>
-              <View style={[s.replyBannerBar, { backgroundColor: "#F59E0B" }]} />
+            <View style={[styles.replyBanner, styles.editBanner]}>
+              <View style={[styles.replyBannerBar, { backgroundColor: "#F59E0B" }]} />
               <View style={{ flex: 1 }}>
-                <Text style={[s.replyBannerLabel, { color: "#B45309" }]}>Editing message</Text>
-                <Text style={s.replyBannerText} numberOfLines={1}>{editingMsg.text}</Text>
+                <Text style={[styles.replyBannerLabel, { color: "#B45309" }]}>Editing message</Text>
+                <Text style={styles.replyBannerText} numberOfLines={1}>{editingMsg.text}</Text>
               </View>
-              <TouchableOpacity onPress={cancelEdit} style={s.replyClose}>
+              <TouchableOpacity onPress={cancelEdit} style={styles.replyClose}>
                 <Ionicons name="close" size={18} color="#6B7280" />
               </TouchableOpacity>
             </View>
           )}
 
           {attachments.length > 0 && (
-            <View style={s.attachStrip}>
+            <View style={styles.attachStrip}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, padding: 8 }}>
                 {attachments.map((att, idx) => (
-                  <View key={idx} style={s.attachThumb}>
-                    {att.type === "image" ? (
-                      <Image source={{ uri: att.uri }} style={s.attachThumbImg} />
-                    ) : (
-                      <View style={s.attachThumbFile}>
-                        <Ionicons
-                          name={att.mimeType === "audio/m4a" ? "mic" : att.mimeType === "video/mp4" ? "videocam" : "document-outline"}
-                          size={22} color={PRIMARY}
-                        />
-                        <Text style={s.attachThumbName} numberOfLines={1}>
-                          {att.mimeType === "audio/m4a" ? "Voice" : att.mimeType === "video/mp4" ? "Video" : att.name.split(".")[0]}
-                        </Text>
-                      </View>
-                    )}
-                    <TouchableOpacity onPress={() => removeAttachment(idx)} style={s.attachRemove}>
+                  <View key={idx} style={styles.attachThumb}>
+                    {att.type === "image"
+                      ? <Image source={{ uri: att.uri }} style={styles.attachThumbImg} />
+                      : (
+                        <View style={styles.attachThumbFile}>
+                          <Ionicons name={att.mimeType === "audio/m4a" ? "mic" : att.mimeType === "video/mp4" ? "videocam" : "document-outline"} size={22} color={PRIMARY} />
+                          <Text style={styles.attachThumbName} numberOfLines={1}>
+                            {att.mimeType === "audio/m4a" ? "Voice" : att.mimeType === "video/mp4" ? "Video" : att.name.split(".")[0]}
+                          </Text>
+                        </View>
+                      )
+                    }
+                    <TouchableOpacity onPress={() => removeAttachment(idx)} style={styles.attachRemove}>
                       <Ionicons name="close-circle" size={20} color="#EF4444" />
                     </TouchableOpacity>
                   </View>
@@ -4183,12 +3962,12 @@ const openDownloadedFile = async (file: DownloadedFile) => {
           )}
 
           {showEmojiPicker && (
-            <View style={s.emojiPanel}>
+            <View style={styles.emojiPanel}>
               <ScrollView showsVerticalScrollIndicator={false}>
-                <View style={s.emojiGrid}>
+                <View style={styles.emojiGrid}>
                   {EMOJI_LIST.map((emoji, i) => (
-                    <TouchableOpacity key={i} style={s.emojiGridBtn} onPress={() => handleEmojiSelect(emoji)}>
-                      <Text style={s.emojiGridText}>{emoji}</Text>
+                    <TouchableOpacity key={i} style={styles.emojiGridBtn} onPress={() => setInputText((p) => p + emoji)}>
+                      <Text style={styles.emojiGridText}>{emoji}</Text>
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -4196,19 +3975,19 @@ const openDownloadedFile = async (file: DownloadedFile) => {
             </View>
           )}
 
-          <View style={s.inputBar}>
-            <TouchableOpacity onPress={showAttachmentOptions} style={s.attachBtn}>
+          <View style={styles.inputBar}>
+            <TouchableOpacity onPress={showAttachmentOptions} style={styles.attachBtn}>
               <Ionicons name="add-circle-outline" size={26} color={PRIMARY} />
             </TouchableOpacity>
             <TouchableOpacity
               onPress={() => { setShowEmojiPicker((v) => !v); if (!showEmojiPicker) inputRef.current?.blur(); }}
-              style={s.attachBtn}
+              style={styles.attachBtn}
             >
-              <Text style={s.emojiToggleIcon}>{showEmojiPicker ? "⌨️" : "😊"}</Text>
+              <Text style={styles.emojiToggleIcon}>{showEmojiPicker ? "⌨️" : "😊"}</Text>
             </TouchableOpacity>
             <TextInput
               ref={inputRef}
-              style={s.input}
+              style={styles.input}
               value={inputText}
               onChangeText={setInputText}
               placeholder={editingMsg ? "Edit message..." : replyTo ? "Write a reply..." : "Type a message..."}
@@ -4219,34 +3998,34 @@ const openDownloadedFile = async (file: DownloadedFile) => {
             />
             {!inputText.trim() && attachments.length === 0 && !editingMsg && (
               <TouchableOpacity
-                style={[s.voiceBtn, isRecording && s.voiceBtnActive]}
+                style={[styles.voiceBtn, isRecording && styles.voiceBtnActive]}
                 onPress={isRecording ? stopRecording : startRecording}
                 activeOpacity={0.8}
               >
-                {isTranscribing ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Ionicons name={isRecording ? "stop" : "mic"} size={20} color="#fff" />
-                )}
+                {isTranscribing
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Ionicons name={isRecording ? "stop" : "mic"} size={20} color="#fff" />
+                }
               </TouchableOpacity>
             )}
             {(!!inputText.trim() || attachments.length > 0 || editingMsg) && (
               <TouchableOpacity
-                style={[s.sendBtn, { backgroundColor: editingMsg ? "#F59E0B" : PRIMARY }, sending && { opacity: 0.5 }]}
-                onPress={sendMessage}
-                disabled={sending}
-                activeOpacity={0.8}
+                style={[styles.sendBtn, { backgroundColor: editingMsg ? "#F59E0B" : PRIMARY }, sending && { opacity: 0.5 }]}
+                onPress={sendMessage} disabled={sending} activeOpacity={0.8}
               >
-                {sending ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name={editingMsg ? "checkmark" : "send"} size={18} color="#fff" />}
+                {sending
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Ionicons name={editingMsg ? "checkmark" : "send"} size={18} color="#fff" />
+                }
               </TouchableOpacity>
             )}
           </View>
 
           {isRecording && (
-            <View style={s.recordingBar}>
-              <View style={s.recordingDot} />
-              <Text style={s.recordingText}>Recording... tap stop to finish</Text>
-              <TouchableOpacity onPress={stopRecording} style={s.recordingStop}>
+            <View style={styles.recordingBar}>
+              <View style={styles.recordingDot} />
+              <Text style={styles.recordingText}>Recording... tap stop to finish</Text>
+              <TouchableOpacity onPress={stopRecording} style={styles.recordingStop}>
                 <Ionicons name="stop-circle" size={22} color="#991B1B" />
               </TouchableOpacity>
             </View>
@@ -4255,92 +4034,82 @@ const openDownloadedFile = async (file: DownloadedFile) => {
       )}
 
       {/* Camera modal */}
-      <Modal
-        visible={showCamera}
-        animationType="slide"
-        onRequestClose={() => { if (isVideoRecording) stopVideoRecording(); setShowCamera(false); }}
-      >
+      <Modal visible={showCamera} animationType="slide" onRequestClose={() => { if (isVideoRecording) stopVideoRecording(); setShowCamera(false); }}>
         <View style={{ flex: 1, backgroundColor: "#000" }}>
           <CameraView ref={cameraRef} style={StyleSheet.absoluteFillObject} facing={cameraFacing} mode="video" />
-          <View style={s.cameraTopBar}>
-            <TouchableOpacity onPress={() => { if (isVideoRecording) stopVideoRecording(); setShowCamera(false); }} style={s.cameraBtn}>
+          <View style={styles.cameraTopBar}>
+            <TouchableOpacity onPress={() => { if (isVideoRecording) stopVideoRecording(); setShowCamera(false); }} style={styles.cameraBtn}>
               <Ionicons name="close" size={24} color="#fff" />
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => setCameraFacing((f) => (f === "back" ? "front" : "back"))} style={s.cameraBtn}>
+            <TouchableOpacity onPress={() => setCameraFacing((f) => (f === "back" ? "front" : "back"))} style={styles.cameraBtn}>
               <Ionicons name="camera-reverse-outline" size={24} color="#fff" />
             </TouchableOpacity>
           </View>
-          <View style={s.cameraBottomBar}>
-            {isVideoRecording && <Text style={s.recordingLabel}>Recording...</Text>}
+          <View style={styles.cameraBottomBar}>
+            {isVideoRecording && <Text style={styles.recordingLabel}>Recording...</Text>}
             <TouchableOpacity
               onPress={isVideoRecording ? stopVideoRecording : startVideoRecording}
-              style={[s.cameraRecord, { backgroundColor: isVideoRecording ? "#EF4444" : "#fff", borderColor: isVideoRecording ? "#fff" : "#EF4444" }]}
+              style={[styles.cameraRecord, { backgroundColor: isVideoRecording ? "#EF4444" : "#fff", borderColor: isVideoRecording ? "#fff" : "#EF4444" }]}
             >
               <Ionicons name={isVideoRecording ? "stop" : "videocam"} size={30} color={isVideoRecording ? "#fff" : "#EF4444"} />
             </TouchableOpacity>
-            <Text style={s.cameraHint}>{isVideoRecording ? "Tap to stop" : "Tap to record video"}</Text>
+            <Text style={styles.cameraHint}>{isVideoRecording ? "Tap to stop" : "Tap to record video"}</Text>
           </View>
         </View>
       </Modal>
 
-      {/* Video player */}
+      {/* ── Viewers — key prop forces remount when URI changes ── */}
       {previewVideo && <VideoPlayerModal uri={previewVideo} onClose={() => setPreviewVideo(null)} />}
 
-            {/* Audio player */}
-      {audioPlayer && <AudioPlayerModal uri={audioPlayer.uri} name={audioPlayer.name} onClose={() => setAudioPlayer(null)} />}
+      {audioPlayer && <AudioPlayerModal key={audioPlayer.uri} uri={audioPlayer.uri} name={audioPlayer.name} onClose={() => setAudioPlayer(null)} />}
 
-      {/* ✅ In-app document viewer */}
-      {docViewer && <InAppDocViewer uri={docViewer.uri} name={docViewer.name} onClose={() => setDocViewer(null)} />}
+      {docViewer && <InAppDocViewer key={docViewer.uri} uri={docViewer.uri} name={docViewer.name} onClose={() => setDocViewer(null)} />}
 
-      {/* Image preview */}
       {previewItem?.type === "image" && (
         <Modal visible animationType="slide" transparent onRequestClose={() => setPreviewItem(null)}>
-          <View style={s.previewModal}>
-            <TouchableOpacity style={s.previewClose} onPress={() => setPreviewItem(null)}>
+          <View style={styles.previewModal}>
+            <TouchableOpacity style={styles.previewClose} onPress={() => setPreviewItem(null)}>
               <Ionicons name="close" size={28} color="#fff" />
             </TouchableOpacity>
-            <Image source={{ uri: previewItem.uri }} style={s.fullImage} resizeMode="contain" />
+            <Image source={{ uri: previewItem.uri }} style={styles.fullImage} resizeMode="contain" />
           </View>
         </Modal>
       )}
 
       {/* Context menu */}
       <Modal visible={!!contextMsg} transparent animationType="fade" onRequestClose={() => setContextMsg(null)}>
-        <Pressable style={s.modalOverlay} onPress={() => setContextMsg(null)}>
-          <View style={s.contextMenu}>
-            <Text style={s.contextPreview} numberOfLines={2}>{contextMsg?.text || "Attachment"}</Text>
-            <TouchableOpacity style={s.contextItem} onPress={handleCopy}>
+        <Pressable style={styles.modalOverlay} onPress={() => setContextMsg(null)}>
+          <View style={styles.contextMenu}>
+            <Text style={styles.contextPreview} numberOfLines={2}>{contextMsg?.text || "Attachment"}</Text>
+            <TouchableOpacity style={styles.contextItem} onPress={handleCopy}>
               <Ionicons name="copy-outline" size={18} color="#374151" />
-              <Text style={s.contextItemText}>Copy</Text>
+              <Text style={styles.contextItemText}>Copy</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={s.contextItem} onPress={handleReply}>
+            <TouchableOpacity style={styles.contextItem} onPress={handleReply}>
               <Ionicons name="arrow-undo-outline" size={18} color="#374151" />
-              <Text style={s.contextItemText}>Reply</Text>
+              <Text style={styles.contextItemText}>Reply</Text>
             </TouchableOpacity>
             {contextMsg?.sender === "parent" && (
-              <TouchableOpacity style={s.contextItem} onPress={handleEdit}>
+              <TouchableOpacity style={styles.contextItem} onPress={handleEdit}>
                 <Ionicons name="pencil-outline" size={18} color="#374151" />
-                <Text style={s.contextItemText}>Edit</Text>
+                <Text style={styles.contextItemText}>Edit</Text>
               </TouchableOpacity>
             )}
-            <TouchableOpacity style={s.contextItem} onPress={handlePin}>
+            <TouchableOpacity style={styles.contextItem} onPress={handlePin}>
               <Ionicons name={pinnedIds.includes(contextMsg?.id ?? "") ? "pin" : "pin-outline"} size={18} color="#374151" />
-              <Text style={s.contextItemText}>{pinnedIds.includes(contextMsg?.id ?? "") ? "Unpin" : "Pin"}</Text>
+              <Text style={styles.contextItemText}>{pinnedIds.includes(contextMsg?.id ?? "") ? "Unpin" : "Pin"}</Text>
             </TouchableOpacity>
             {contextMsg?.sender === "parent" && (
-              <TouchableOpacity
-                style={[s.contextItem, { borderTopWidth: 1, borderTopColor: "#F3F4F6", marginTop: 4 }]}
-                onPress={handleDelete}
-              >
+              <TouchableOpacity style={[styles.contextItem, { borderTopWidth: 1, borderTopColor: "#F3F4F6", marginTop: 4 }]} onPress={handleDelete}>
                 <Ionicons name="trash-outline" size={18} color="#EF4444" />
-                <Text style={[s.contextItemText, { color: "#EF4444" }]}>Delete</Text>
+                <Text style={[styles.contextItemText, { color: "#EF4444" }]}>Delete</Text>
               </TouchableOpacity>
             )}
           </View>
         </Pressable>
       </Modal>
 
-      {/* ✅ FIX 1: Global search results modal */}
+      {/* Global search results */}
       {showGlobalResults && (
         <GlobalSearchModal
           results={globalSearchResults}
@@ -4350,17 +4119,14 @@ const openDownloadedFile = async (file: DownloadedFile) => {
             setShowSearch(false);
             setSearchQuery("");
             const m = result.message;
-            if (result.type === "media" || result.type === "file" || result.type === "voice") {
-              // Navigate to media tab and open the file
-              if (result.type === "media") setActiveTab("media");
-              else setActiveTab("media");
+            if (result.type === "message") {
+              setActiveTab("chat");
+              setTimeout(() => scrollToMessage(m.id), 300);
+            } else {
+              setActiveTab("media");
               setTimeout(() => {
                 if (m.attachmentUrl) openInApp(buildUrl(m.attachmentUrl), m.attachmentName ?? "file");
               }, 300);
-            } else {
-              // Navigate to chat and scroll to message
-              setActiveTab("chat");
-              setTimeout(() => scrollToMessage(m.id), 300);
             }
           }}
         />
@@ -4369,159 +4135,155 @@ const openDownloadedFile = async (file: DownloadedFile) => {
   );
 }
 
-// ── Styles ──────────────────────────────────────────────────
-const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#F0F4FB" },
-  // ✅ New: file loading overlay
-  fileLoadingOverlay: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,47,0.55)", zIndex: 999, alignItems: "center", justifyContent: "center", gap: 12 },
-  fileLoadingText: { color: "#fff", fontSize: 14, fontWeight: "700" },
-  header: { flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingTop: 14, paddingBottom: 14, gap: 8 },
-  headerBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.15)", alignItems: "center", justifyContent: "center" },
-  headerCenter: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10 },
-  headerAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.2)", alignItems: "center", justifyContent: "center", borderWidth: 1.5, borderColor: "rgba(255,255,255,0.3)" },
-  headerAvatarText: { color: "#fff", fontSize: 15, fontWeight: "800" },
-  headerName: { color: "#fff", fontSize: 15, fontWeight: "800" },
-  headerSub: { color: "rgba(255,255,255,0.75)", fontSize: 11 },
-  headerActions: { flexDirection: "row", gap: 6 },
-  tabBar: { flexDirection: "row", backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: "#E5E7EB" },
-  tab: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, paddingVertical: 11, paddingHorizontal: 4, borderBottomWidth: 2.5, borderBottomColor: "transparent" },
-  tabActive: { borderBottomColor: PRIMARY },
-  tabText: { fontSize: 12, fontWeight: "600", color: "#9CA3AF" },
-  tabTextActive: { color: PRIMARY, fontWeight: "700" },
-  // ✅ Updated search bar with results button
-  searchBar: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#fff", paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#E5E7EB" },
-  searchInput: { flex: 1, fontSize: 14, color: "#1F2937" },
-  searchResultsBtn: { flexDirection: "row", alignItems: "center", gap: 3, backgroundColor: "#EEF3FF", borderRadius: 10, paddingHorizontal: 8, paddingVertical: 4 },
-  searchCount: { fontSize: 12, color: PRIMARY, fontWeight: "700" },
-  pinnedBanner: { flexDirection: "row", alignItems: "center", backgroundColor: "#FFFBEB", paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: "#FDE68A" },
-  pinnedChip: { backgroundColor: "#FDE68A", borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4, marginRight: 8 },
-  pinnedChipText: { fontSize: 11, color: "#92400E", maxWidth: 150, fontWeight: "600" },
-  loadingWrap: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
-  loadingText: { color: PRIMARY, fontSize: 14, fontWeight: "600" },
-  emptyWrap: { alignItems: "center", paddingTop: 80 },
-  list: { padding: 12, paddingBottom: 8 },
-  mediaChipSub: { fontSize: 11, color: "#6B7280" },
-  downloadBtn: { padding: 6 },
-  dateSeparator: { flexDirection: "row", alignItems: "center", marginVertical: 12, gap: 8 },
-  dateLine: { flex: 1, height: 1, backgroundColor: "#E5E7EB" },
-  dateLabel: { fontSize: 11, color: "#9CA3AF", fontWeight: "600", paddingHorizontal: 4 },
-  msgRow: { flexDirection: "row", alignItems: "flex-end", marginBottom: 6, gap: 8 },
-  msgRowRight: { flexDirection: "row-reverse" },
-  teacherAvatar: { width: 28, height: 28, borderRadius: 14, backgroundColor: "#EEF3FF", alignItems: "center", justifyContent: "center", marginBottom: 4 },
-  teacherLabel: { fontSize: 10, color: "#9CA3AF", marginBottom: 2, marginLeft: 2 },
-  pinRow: { flexDirection: "row", alignItems: "center", gap: 3, marginBottom: 2 },
-  pinText: { fontSize: 10, color: "#F59E0B", fontWeight: "600" },
-  bubble: { borderRadius: 18, padding: 10, maxWidth: "100%" },
-  bubbleLeft: { backgroundColor: "#fff", borderBottomLeftRadius: 4, borderWidth: 1, borderColor: "#F0F0F0", elevation: 1, shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 4 },
-  bubbleRight: { backgroundColor: PRIMARY, borderBottomRightRadius: 4, elevation: 2, shadowColor: PRIMARY, shadowOpacity: 0.2, shadowRadius: 6 },
-  bubblePinned: { borderWidth: 1.5, borderColor: "#F59E0B" },
-  replyRef: { flexDirection: "row", borderRadius: 10, padding: 8, marginBottom: 6, gap: 8 },
-  replyRefRight: { backgroundColor: "rgba(255,255,255,0.15)" },
-  replyRefLeft: { backgroundColor: "#F3F4F6" },
-  replyRefBar: { width: 3, borderRadius: 2, backgroundColor: "#60A5FA" },
-  replyRefLabel: { fontSize: 10, color: "#9CA3AF", marginBottom: 1 },
-  replyRefText: { fontSize: 12, color: "#374151", fontWeight: "600" },
-  msgText: { fontSize: 15, color: "#111827", lineHeight: 21 },
-  attachedImage: { width: 200, height: 150, borderRadius: 12, marginTop: 6 },
-  mediaChip: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 6, backgroundColor: "#F3F4F6", borderRadius: 12, padding: 10 },
-  mediaChipRight: { backgroundColor: "rgba(255,255,255,0.15)" },
-  mediaChipText: { fontSize: 13, color: "#374151", flex: 1 },
-  videoThumb: { width: 44, height: 44, borderRadius: 10, backgroundColor: "#1F2937", alignItems: "center", justifyContent: "center" },
-  voiceChip: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 6, backgroundColor: "#F3F4F6", borderRadius: 12, padding: 10 },
-  voiceChipRight: { backgroundColor: "rgba(255,255,255,0.15)" },
-  waveform: { flexDirection: "row", alignItems: "center", gap: 2, flex: 1 },
-  waveBar: { width: 3, borderRadius: 2 },
-  voiceLabel: { fontSize: 11, color: "#6B7280", fontWeight: "600" },
-fileChip: { flexDirection: "row", alignItems: "center", marginTop: 6, backgroundColor: "#F3F4F6", borderRadius: 12, padding: 10, minWidth: 200 },
-fileChipRight: { backgroundColor: "rgba(255,255,255,0.15)" },
-  fileIconBox: { width: 40, height: 40, borderRadius: 10, backgroundColor: "#EEF3FF", alignItems: "center", justifyContent: "center", flexShrink: 0 },
-  fileName: { fontSize: 13, color: "#374151", fontWeight: "600" },
-  fileSub: { fontSize: 10, color: "#9CA3AF", marginTop: 1 },
-  timeRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 },
-  timeText: { fontSize: 10, color: "#9CA3AF" },
-  replyBanner: { flexDirection: "row", alignItems: "center", backgroundColor: "#F9FAFB", paddingHorizontal: 12, paddingVertical: 10, borderTopWidth: 1, borderTopColor: "#E5E7EB", gap: 10 },
-  replyBannerBar: { width: 3, height: 36, borderRadius: 2, backgroundColor: PRIMARY },
-  replyBannerLabel: { fontSize: 11, color: "#6B7280", fontWeight: "600" },
-  replyBannerText: { fontSize: 13, color: "#1F2937" },
-  replyClose: { padding: 4 },
-  editBanner: { backgroundColor: "#FFFBEB" },
-  attachStrip: { backgroundColor: "#F9FAFB", borderTopWidth: 1, borderTopColor: "#E5E7EB" },
-  attachThumb: { position: "relative" },
-  attachThumbImg: { width: 64, height: 64, borderRadius: 10 },
-  attachThumbFile: { width: 64, height: 64, borderRadius: 10, backgroundColor: "#EEF3FF", alignItems: "center", justifyContent: "center", gap: 4 },
-  attachThumbName: { fontSize: 9, color: PRIMARY, fontWeight: "600", maxWidth: 60, textAlign: "center" },
-  attachRemove: { position: "absolute", top: -6, right: -6 },
-  emojiPanel: { backgroundColor: "#fff", borderTopWidth: 1, borderTopColor: "#E5E7EB", height: 220, paddingHorizontal: 8, paddingTop: 8 },
-  emojiGrid: { flexDirection: "row", flexWrap: "wrap" },
-  emojiGridBtn: { width: (SCREEN_W - 16) / 8, height: 44, alignItems: "center", justifyContent: "center" },
-  emojiGridText: { fontSize: 24 },
-  emojiToggleIcon: { fontSize: 24 },
-  inputBar: { flexDirection: "row", alignItems: "flex-end", padding: 8, gap: 8, backgroundColor: "#fff", borderTopWidth: 1, borderTopColor: "#E5E7EB" },
-  attachBtn: { padding: 4 },
-  input: { flex: 1, backgroundColor: "#F3F4F6", borderRadius: 22, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15, maxHeight: 100, color: "#1F2937" },
-  voiceBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: "#6B7280", alignItems: "center", justifyContent: "center" },
-  voiceBtnActive: { backgroundColor: "#EF4444" },
-  sendBtn: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
-  recordingBar: { flexDirection: "row", alignItems: "center", backgroundColor: "#FEE2E2", paddingHorizontal: 14, paddingVertical: 10, gap: 10 },
-  recordingDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: "#EF4444" },
-  recordingText: { flex: 1, fontSize: 13, color: "#991B1B", fontWeight: "600" },
-  recordingStop: { padding: 4 },
-  cameraTopBar: { position: "absolute", top: 0, left: 0, right: 0, flexDirection: "row", justifyContent: "space-between", padding: 16, paddingTop: 50 },
-  cameraBtn: { backgroundColor: "rgba(0,0,0,0.5)", borderRadius: 20, padding: 8 },
-  cameraBottomBar: { position: "absolute", bottom: 50, left: 0, right: 0, alignItems: "center", gap: 12 },
-  cameraRecord: { width: 72, height: 72, borderRadius: 36, borderWidth: 4, alignItems: "center", justifyContent: "center" },
-  cameraHint: { color: "rgba(255,255,255,0.7)", fontSize: 13 },
-  recordingLabel: { color: "#fff", fontSize: 15, fontWeight: "700" },
-  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "center", alignItems: "center" },
-  contextMenu: { backgroundColor: "#fff", borderRadius: 20, width: 280, overflow: "hidden", elevation: 12, shadowColor: "#000", shadowOpacity: 0.2, shadowRadius: 12 },
-  contextPreview: { fontSize: 12, color: "#9CA3AF", paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#F3F4F6" },
-  contextItem: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 13 },
-  contextItemText: { fontSize: 15, color: "#111827", fontWeight: "500" },
-  previewModal: { flex: 1, backgroundColor: "#000", justifyContent: "center", alignItems: "center" },
-  previewClose: { position: "absolute", top: 50, right: 16, zIndex: 10, backgroundColor: "rgba(0,0,0,0.5)", borderRadius: 20, padding: 6 },
-  fullImage: { width: "100%", height: "80%" },
-  videoClose: { position: "absolute", top: 50, right: 16, zIndex: 10, backgroundColor: "rgba(0,0,0,0.6)", borderRadius: 20, padding: 8 },
-  galleryScroll: { padding: 16, paddingBottom: 40 },
-  emptyGallery: { alignItems: "center", paddingTop: 60, gap: 12 },
-  emptyGalleryTitle: { fontSize: 16, fontWeight: "700", color: "#1F2937" },
-  emptyGalleryText: { fontSize: 13, color: "#9CA3AF", textAlign: "center", lineHeight: 20, paddingHorizontal: 30 },
-  dlHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14, paddingHorizontal: 2 },
-  dlHeaderLeft: { flexDirection: "row", alignItems: "center", gap: 6 },
-  dlHeaderTitle: { fontSize: 14, fontWeight: "700", color: PRIMARY },
-  dlHeaderSub: { fontSize: 11, color: "#9CA3AF" },
-  dlRow: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "#fff", borderRadius: 14, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: "#E8EFFA", elevation: 2, shadowColor: PRIMARY, shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 2 } },
-  dlIconBox: { width: 48, height: 48, borderRadius: 13, alignItems: "center", justifyContent: "center" },
-  dlName: { fontSize: 14, fontWeight: "600", color: "#1F2937", marginBottom: 3 },
-  dlMeta: { fontSize: 11, color: "#9CA3AF", marginBottom: 5 },
-  dlOfflineBadge: { flexDirection: "row", alignItems: "center", gap: 4 },
-  dlOfflineText: { fontSize: 10, color: "#16A34A", fontWeight: "600" },
-  dlActions: { flexDirection: "row", gap: 2 },
-  dlActionBtn: { padding: 8, borderRadius: 8 },
-  dlEmptyIconWrap: { width: 80, height: 80, borderRadius: 40, backgroundColor: "#EEF3FF", alignItems: "center", justifyContent: "center", marginBottom: 4 },
-  subTabBar: { flexDirection: "row", gap: 8, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: "#F0F4FB", borderBottomWidth: 1, borderBottomColor: "#E5E7EB" },
-  subTab: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: "#fff", borderWidth: 1, borderColor: "#E5E7EB" },
-  subTabActive: { backgroundColor: PRIMARY, borderColor: PRIMARY },
-  subTabText: { fontSize: 12, fontWeight: "600", color: "#6B7280" },
-  subTabTextActive: { color: "#fff" },
-  paneScroll: { padding: 14, paddingBottom: 40 },
-  grid: { flexDirection: "row", flexWrap: "wrap", gap: 4 },
-  thumb: { width: (SCREEN_W - 44) / 3, height: (SCREEN_W - 44) / 3, borderRadius: 10, overflow: "hidden", position: "relative" },
-  thumbImg: { width: "100%", height: "100%" },
-  playOverlay: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.28)" },
-  thumbDlBtn: { position: "absolute", top: 5, right: 5, backgroundColor: "rgba(0,0,0,0.48)", borderRadius: 12, padding: 3 },
-  thumbTime: { position: "absolute", bottom: 4, right: 6, fontSize: 9, color: "#fff", fontWeight: "700" },
-  section: { marginBottom: 10, backgroundColor: "#fff", borderRadius: 14, borderWidth: 1, borderColor: "#E8EFFA", overflow: "hidden" },
-  sectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 14, paddingVertical: 13 },
-  sectionHeaderLeft: { flexDirection: "row", alignItems: "center", gap: 8 },
-  sectionDot: { width: 8, height: 8, borderRadius: 4 },
-  sectionTitle: { fontSize: 13, fontWeight: "700", color: "#1F2937" },
-  sectionBadge: { backgroundColor: "#EEF3FF", borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2 },
-  sectionBadgeText: { fontSize: 11, fontWeight: "700", color: PRIMARY },
-  fileRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 14, paddingVertical: 11, borderTopWidth: 0.5, borderTopColor: "#F3F4F6" },
-  fileMeta: { fontSize: 11, color: "#9CA3AF" },
-  playBtn: { width: 30, height: 30, borderRadius: 15, backgroundColor: "#EDE9FE", alignItems: "center", justifyContent: "center" },
-  empty: { alignItems: "center", paddingTop: 60, gap: 10 },
-  emptyIconWrap: { width: 72, height: 72, borderRadius: 36, backgroundColor: "#EEF3FF", alignItems: "center", justifyContent: "center", marginBottom: 4 },
-  emptyTitle: { fontSize: 15, fontWeight: "700", color: "#1F2937" },
-  emptySub: { fontSize: 13, color: "#9CA3AF", textAlign: "center", lineHeight: 19, paddingHorizontal: 28 },
+// ── Styles ───────────────────────────────────────────────────
+const styles = StyleSheet.create({
+  safe:               { flex: 1, backgroundColor: "#F0F4FB" },
+  header:             { flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingTop: 14, paddingBottom: 14, gap: 8 },
+  headerBtn:          { width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.15)", alignItems: "center", justifyContent: "center" },
+  headerCenter:       { flex: 1, flexDirection: "row", alignItems: "center", gap: 10 },
+  headerAvatar:       { width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.2)", alignItems: "center", justifyContent: "center", borderWidth: 1.5, borderColor: "rgba(255,255,255,0.3)" },
+  headerAvatarText:   { color: "#fff", fontSize: 15, fontWeight: "800" },
+  headerName:         { color: "#fff", fontSize: 15, fontWeight: "800" },
+  headerSub:          { color: "rgba(255,255,255,0.75)", fontSize: 11 },
+  headerActions:      { flexDirection: "row", gap: 6 },
+  tabBar:             { flexDirection: "row", backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: "#E5E7EB" },
+  tab:                { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, paddingVertical: 11, paddingHorizontal: 4, borderBottomWidth: 2.5, borderBottomColor: "transparent" },
+  tabActive:          { borderBottomColor: PRIMARY },
+  tabText:            { fontSize: 12, fontWeight: "600", color: "#9CA3AF" },
+  tabTextActive:      { color: PRIMARY, fontWeight: "700" },
+  searchBar:          { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#fff", paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#E5E7EB" },
+  searchInput:        { flex: 1, fontSize: 14, color: "#1F2937" },
+  searchResultsBtn:   { flexDirection: "row", alignItems: "center", gap: 3, backgroundColor: "#EEF3FF", borderRadius: 10, paddingHorizontal: 8, paddingVertical: 4 },
+  searchCount:        { fontSize: 12, color: PRIMARY, fontWeight: "700" },
+  pinnedBanner:       { flexDirection: "row", alignItems: "center", backgroundColor: "#FFFBEB", paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: "#FDE68A" },
+  pinnedChip:         { backgroundColor: "#FDE68A", borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4, marginRight: 8 },
+  pinnedChipText:     { fontSize: 11, color: "#92400E", maxWidth: 150, fontWeight: "600" },
+  loadingWrap:        { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
+  loadingText:        { color: PRIMARY, fontSize: 14, fontWeight: "600" },
+  emptyWrap:          { alignItems: "center", paddingTop: 80 },
+  list:               { padding: 12, paddingBottom: 8 },
+  dateSeparator:      { flexDirection: "row", alignItems: "center", marginVertical: 12, gap: 8 },
+  dateLine:           { flex: 1, height: 1, backgroundColor: "#E5E7EB" },
+  dateLabel:          { fontSize: 11, color: "#9CA3AF", fontWeight: "600", paddingHorizontal: 4 },
+  msgRow:             { flexDirection: "row", alignItems: "flex-end", marginBottom: 6, gap: 8 },
+  msgRowRight:        { flexDirection: "row-reverse" },
+  teacherAvatar:      { width: 28, height: 28, borderRadius: 14, backgroundColor: "#EEF3FF", alignItems: "center", justifyContent: "center", marginBottom: 4 },
+  teacherLabel:       { fontSize: 10, color: "#9CA3AF", marginBottom: 2, marginLeft: 2 },
+  pinRow:             { flexDirection: "row", alignItems: "center", gap: 3, marginBottom: 2 },
+  pinText:            { fontSize: 10, color: "#F59E0B", fontWeight: "600" },
+  bubble:             { borderRadius: 18, padding: 10, maxWidth: "100%" },
+  bubbleLeft:         { backgroundColor: "#fff", borderBottomLeftRadius: 4, borderWidth: 1, borderColor: "#F0F0F0", elevation: 1, shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 4 },
+  bubbleRight:        { backgroundColor: PRIMARY, borderBottomRightRadius: 4, elevation: 2, shadowColor: PRIMARY, shadowOpacity: 0.2, shadowRadius: 6 },
+  bubblePinned:       { borderWidth: 1.5, borderColor: "#F59E0B" },
+  replyRef:           { flexDirection: "row", borderRadius: 10, padding: 8, marginBottom: 6, gap: 8 },
+  replyRefRight:      { backgroundColor: "rgba(255,255,255,0.15)" },
+  replyRefLeft:       { backgroundColor: "#F3F4F6" },
+  replyRefBar:        { width: 3, borderRadius: 2, backgroundColor: "#60A5FA" },
+  replyRefLabel:      { fontSize: 10, color: "#9CA3AF", marginBottom: 1 },
+  replyRefText:       { fontSize: 12, color: "#374151", fontWeight: "600" },
+  msgText:            { fontSize: 15, color: "#111827", lineHeight: 21 },
+  attachedImage:      { width: 200, height: 150, borderRadius: 12, marginTop: 6 },
+  mediaChip:          { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 6, backgroundColor: "#F3F4F6", borderRadius: 12, padding: 10 },
+  mediaChipRight:     { backgroundColor: "rgba(255,255,255,0.15)" },
+  mediaChipText:      { fontSize: 13, color: "#374151", flex: 1 },
+  mediaChipSub:       { fontSize: 11, color: "#6B7280" },
+  videoThumb:         { width: 44, height: 44, borderRadius: 10, backgroundColor: "#1F2937", alignItems: "center", justifyContent: "center" },
+  voiceChip:          { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 6, backgroundColor: "#F3F4F6", borderRadius: 12, padding: 10 },
+  voiceChipRight:     { backgroundColor: "rgba(255,255,255,0.15)" },
+  waveform:           { flexDirection: "row", alignItems: "center", gap: 2, flex: 1 },
+  waveBar:            { width: 3, borderRadius: 2 },
+  voiceLabel:         { fontSize: 11, color: "#6B7280", fontWeight: "600" },
+  fileChip:           { flexDirection: "row", alignItems: "center", marginTop: 6, backgroundColor: "#F3F4F6", borderRadius: 12, padding: 10, minWidth: 200 },
+  fileChipRight:      { backgroundColor: "rgba(255,255,255,0.15)" },
+  fileIconBox:        { width: 40, height: 40, borderRadius: 10, backgroundColor: "#EEF3FF", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  fileName:           { fontSize: 13, color: "#374151", fontWeight: "600" },
+  fileSub:            { fontSize: 10, color: "#9CA3AF", marginTop: 1 },
+  fileMeta:           { fontSize: 11, color: "#9CA3AF" },
+  timeRow:            { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 },
+  timeText:           { fontSize: 10, color: "#9CA3AF" },
+  replyBanner:        { flexDirection: "row", alignItems: "center", backgroundColor: "#F9FAFB", paddingHorizontal: 12, paddingVertical: 10, borderTopWidth: 1, borderTopColor: "#E5E7EB", gap: 10 },
+  replyBannerBar:     { width: 3, height: 36, borderRadius: 2, backgroundColor: PRIMARY },
+  replyBannerLabel:   { fontSize: 11, color: "#6B7280", fontWeight: "600" },
+  replyBannerText:    { fontSize: 13, color: "#1F2937" },
+  replyClose:         { padding: 4 },
+  editBanner:         { backgroundColor: "#FFFBEB" },
+  attachStrip:        { backgroundColor: "#F9FAFB", borderTopWidth: 1, borderTopColor: "#E5E7EB" },
+  attachThumb:        { position: "relative" },
+  attachThumbImg:     { width: 64, height: 64, borderRadius: 10 },
+  attachThumbFile:    { width: 64, height: 64, borderRadius: 10, backgroundColor: "#EEF3FF", alignItems: "center", justifyContent: "center", gap: 4 },
+  attachThumbName:    { fontSize: 9, color: PRIMARY, fontWeight: "600", maxWidth: 60, textAlign: "center" },
+  attachRemove:       { position: "absolute", top: -6, right: -6 },
+  emojiPanel:         { backgroundColor: "#fff", borderTopWidth: 1, borderTopColor: "#E5E7EB", height: 220, paddingHorizontal: 8, paddingTop: 8 },
+  emojiGrid:          { flexDirection: "row", flexWrap: "wrap" },
+  emojiGridBtn:       { width: (SCREEN_W - 16) / 8, height: 44, alignItems: "center", justifyContent: "center" },
+  emojiGridText:      { fontSize: 24 },
+  emojiToggleIcon:    { fontSize: 24 },
+  inputBar:           { flexDirection: "row", alignItems: "flex-end", padding: 8, gap: 8, backgroundColor: "#fff", borderTopWidth: 1, borderTopColor: "#E5E7EB" },
+  attachBtn:          { padding: 4 },
+  input:              { flex: 1, backgroundColor: "#F3F4F6", borderRadius: 22, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15, maxHeight: 100, color: "#1F2937" },
+  voiceBtn:           { width: 40, height: 40, borderRadius: 20, backgroundColor: "#6B7280", alignItems: "center", justifyContent: "center" },
+  voiceBtnActive:     { backgroundColor: "#EF4444" },
+  sendBtn:            { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
+  downloadBtn:        { padding: 6 },
+  recordingBar:       { flexDirection: "row", alignItems: "center", backgroundColor: "#FEE2E2", paddingHorizontal: 14, paddingVertical: 10, gap: 10 },
+  recordingDot:       { width: 10, height: 10, borderRadius: 5, backgroundColor: "#EF4444" },
+  recordingText:      { flex: 1, fontSize: 13, color: "#991B1B", fontWeight: "600" },
+  recordingStop:      { padding: 4 },
+  cameraTopBar:       { position: "absolute", top: 0, left: 0, right: 0, flexDirection: "row", justifyContent: "space-between", padding: 16, paddingTop: 50 },
+  cameraBtn:          { backgroundColor: "rgba(0,0,0,0.5)", borderRadius: 20, padding: 8 },
+  cameraBottomBar:    { position: "absolute", bottom: 50, left: 0, right: 0, alignItems: "center", gap: 12 },
+  cameraRecord:       { width: 72, height: 72, borderRadius: 36, borderWidth: 4, alignItems: "center", justifyContent: "center" },
+  cameraHint:         { color: "rgba(255,255,255,0.7)", fontSize: 13 },
+  recordingLabel:     { color: "#fff", fontSize: 15, fontWeight: "700" },
+  videoClose:         { position: "absolute", top: 50, right: 16, zIndex: 10, backgroundColor: "rgba(0,0,0,0.6)", borderRadius: 20, padding: 8 },
+  previewModal:       { flex: 1, backgroundColor: "#000", justifyContent: "center", alignItems: "center" },
+  previewClose:       { position: "absolute", top: 50, right: 16, zIndex: 10, backgroundColor: "rgba(0,0,0,0.5)", borderRadius: 20, padding: 6 },
+  fullImage:          { width: "100%", height: "80%" },
+  modalOverlay:       { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "center", alignItems: "center" },
+  contextMenu:        { backgroundColor: "#fff", borderRadius: 20, width: 280, overflow: "hidden", elevation: 12, shadowColor: "#000", shadowOpacity: 0.2, shadowRadius: 12 },
+  contextPreview:     { fontSize: 12, color: "#9CA3AF", paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#F3F4F6" },
+  contextItem:        { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 13 },
+  contextItemText:    { fontSize: 15, color: "#111827", fontWeight: "500" },
+  galleryScroll:      { padding: 16, paddingBottom: 40 },
+  emptyGallery:       { alignItems: "center", paddingTop: 60, gap: 12 },
+  emptyGalleryTitle:  { fontSize: 16, fontWeight: "700", color: "#1F2937" },
+  emptyGalleryText:   { fontSize: 13, color: "#9CA3AF", textAlign: "center", lineHeight: 20, paddingHorizontal: 30 },
+  dlHeader:           { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14, paddingHorizontal: 2 },
+  dlHeaderLeft:       { flexDirection: "row", alignItems: "center", gap: 6 },
+  dlHeaderTitle:      { fontSize: 14, fontWeight: "700", color: PRIMARY },
+  dlHeaderSub:        { fontSize: 11, color: "#9CA3AF" },
+  dlRow:              { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "#fff", borderRadius: 14, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: "#E8EFFA", elevation: 2, shadowColor: PRIMARY, shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 2 } },
+  dlIconBox:          { width: 48, height: 48, borderRadius: 13, alignItems: "center", justifyContent: "center" },
+  dlName:             { fontSize: 14, fontWeight: "600", color: "#1F2937", marginBottom: 3 },
+  dlMeta:             { fontSize: 11, color: "#9CA3AF", marginBottom: 5 },
+  dlOfflineBadge:     { flexDirection: "row", alignItems: "center", gap: 4 },
+  dlOfflineText:      { fontSize: 10, color: "#16A34A", fontWeight: "600" },
+  dlActions:          { flexDirection: "row", gap: 2 },
+  dlActionBtn:        { padding: 8, borderRadius: 8 },
+  dlEmptyIconWrap:    { width: 80, height: 80, borderRadius: 40, backgroundColor: "#EEF3FF", alignItems: "center", justifyContent: "center", marginBottom: 4 },
+  subTabBar:          { flexDirection: "row", gap: 8, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: "#F0F4FB", borderBottomWidth: 1, borderBottomColor: "#E5E7EB" },
+  subTab:             { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: "#fff", borderWidth: 1, borderColor: "#E5E7EB" },
+  subTabActive:       { backgroundColor: PRIMARY, borderColor: PRIMARY },
+  subTabText:         { fontSize: 12, fontWeight: "600", color: "#6B7280" },
+  subTabTextActive:   { color: "#fff" },
+  paneScroll:         { padding: 14, paddingBottom: 40 },
+  grid:               { flexDirection: "row", flexWrap: "wrap", gap: 4 },
+  thumb:              { width: (SCREEN_W - 44) / 3, height: (SCREEN_W - 44) / 3, borderRadius: 10, overflow: "hidden", position: "relative" },
+  thumbImg:           { width: "100%", height: "100%" },
+  playOverlay:        { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.28)" },
+  thumbDlBtn:         { position: "absolute", top: 5, right: 5, backgroundColor: "rgba(0,0,0,0.48)", borderRadius: 12, padding: 3 },
+  thumbTime:          { position: "absolute", bottom: 4, right: 6, fontSize: 9, color: "#fff", fontWeight: "700" },
+  section:            { marginBottom: 10, backgroundColor: "#fff", borderRadius: 14, borderWidth: 1, borderColor: "#E8EFFA", overflow: "hidden" },
+  sectionHeader:      { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 14, paddingVertical: 13 },
+  sectionHeaderLeft:  { flexDirection: "row", alignItems: "center", gap: 8 },
+  sectionDot:         { width: 8, height: 8, borderRadius: 4 },
+  sectionTitle:       { fontSize: 13, fontWeight: "700", color: "#1F2937" },
+  sectionBadge:       { backgroundColor: "#EEF3FF", borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2 },
+  sectionBadgeText:   { fontSize: 11, fontWeight: "700", color: PRIMARY },
+  fileRow:            { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 14, paddingVertical: 11, borderTopWidth: 0.5, borderTopColor: "#F3F4F6" },
+  playBtn:            { width: 30, height: 30, borderRadius: 15, backgroundColor: "#EDE9FE", alignItems: "center", justifyContent: "center" },
+  empty:              { alignItems: "center", paddingTop: 60, gap: 10 },
+  emptyIconWrap:      { width: 72, height: 72, borderRadius: 36, backgroundColor: "#EEF3FF", alignItems: "center", justifyContent: "center", marginBottom: 4 },
+  emptyTitle:         { fontSize: 15, fontWeight: "700", color: "#1F2937" },
+  emptySub:           { fontSize: 13, color: "#9CA3AF", textAlign: "center", lineHeight: 19, paddingHorizontal: 28 },
 });

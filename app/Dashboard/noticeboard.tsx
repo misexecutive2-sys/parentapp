@@ -72,13 +72,17 @@ export default function StudentNoticeBoard() {
       const requestHeaders = {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
+        "x-academic-year-id": await AsyncStorage.getItem("selectedYearId") ?? "16",
       };
       console.log("Headers:", JSON.stringify(requestHeaders));
 
-      const res = await fetch(`${BASE_URL}/api/notices/student?student_id=${child?.id}`, {
-        method: "GET",
-        headers: requestHeaders,
-      });
+const res = await fetch(`${BASE_URL}/api/notices/student?student_id=${child?.id}`, {
+  method: "GET",
+  headers: {
+    ...requestHeaders,
+    "x-academic-year-id": await AsyncStorage.getItem("selectedYearId") ?? "16",
+  },
+});
 
       console.log("\n── Response ──");
       console.log("Status :", res.status, res.statusText ?? "");

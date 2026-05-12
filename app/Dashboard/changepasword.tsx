@@ -203,6 +203,7 @@ const handleChangePassword = async (): Promise<void> => {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
+          "x-academic-year-id": await AsyncStorage.getItem("selectedYearId") ?? "16",
         },
         body: JSON.stringify({ 
           oldPassword, 

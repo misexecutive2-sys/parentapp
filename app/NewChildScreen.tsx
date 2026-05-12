@@ -7,7 +7,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { LinearGradient as ExpoLinearGradient } from "expo-linear-gradient";
 
-const API_URL = "https://endurable-even-distant.ngrok-free.dev";
+const API_URL = "https://connect.schoolaid.in";
 
 export default function NewChildScreen() {
   const router = useRouter();
@@ -33,6 +33,7 @@ export default function NewChildScreen() {
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
+        "x-academic-year-id": await AsyncStorage.getItem("selectedYearId") ?? "16",
       },
       body: JSON.stringify({ licenseKey }),
     });

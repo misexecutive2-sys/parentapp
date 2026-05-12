@@ -672,7 +672,7 @@ export default function AddChildScreen() {
   const fetchChildren = async () => {
     const token = await AsyncStorage.getItem("token");
     const res = await fetch(`${API_URL}/api/add-child/my-children`, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { Authorization: `Bearer ${token}` , "Content-Type": "application/json" , "x-academic-year-id": await AsyncStorage.getItem("selectedYearId") ?? "16" },
     });
     const data = await res.json();
     if (res.ok) setChildren(data.children);
@@ -707,7 +707,7 @@ export default function AddChildScreen() {
     try {
       const res = await fetch(`${API_URL}/api/add-child/preview-child`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` , "x-academic-year-id": await AsyncStorage.getItem("selectedYearId") ?? "16" },
         body: JSON.stringify({ license }),
       });
       const text = await res.text();
@@ -732,7 +732,7 @@ export default function AddChildScreen() {
     try {
       const res = await fetch(`${API_URL}/api/add-child`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` , "x-academic-year-id": await AsyncStorage.getItem("selectedYearId") ?? "16" },
         body: JSON.stringify({ license }),
       });
       const text = await res.text();
@@ -765,7 +765,7 @@ export default function AddChildScreen() {
     try {
       const res = await fetch(`${API_URL}/api/app/student-exams`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "x-academic-year": yearId ?? "16" },
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "x-academic-year-id": yearId ?? "16" },
         body: JSON.stringify({ student_id: item.id }),
       });
       const data = await res.json();

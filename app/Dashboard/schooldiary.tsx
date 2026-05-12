@@ -2973,6 +2973,7 @@ const SubmissionHistory = ({
           headers: {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
+            "x-academic-year-id": await AsyncStorage.getItem("academicYearId") || "16",
           },
         },
       );
@@ -3253,7 +3254,7 @@ const SubmissionModal = ({
         `${BASE_URL}/api/homework/submit?student_id=${studentId}`,
         {
           method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { Authorization: `Bearer ${token}` ,"x-academic-year-id" : await AsyncStorage.getItem("academicYearId") || "16"},
           body: fd,
         },
       );
@@ -4300,6 +4301,7 @@ export default function SchoolDiaryScreen() {
           headers: {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
+            "x-academic_year_id": await AsyncStorage.getItem("selectedYearId") || "",
           },
         });
         if (res.status === 401) {

@@ -135,6 +135,7 @@ export default function LoginScreen() {
         headers: {
           "Content-Type": "application/json",
           "X-Client": "SchoolAid-App/1.0",
+          "x-academic-year-id": await AsyncStorage.getItem("selectedYearId") ?? "16",
         },
         body: JSON.stringify({
           mobile: `${selectedCountry.code}${mobile}`,
@@ -182,7 +183,7 @@ export default function LoginScreen() {
         }
 
         const childRes = await fetch(`${API_URL}/api/add-child/my-children`, {
-          headers: { Authorization: `Bearer ${data.token}` },
+          headers: { Authorization: `Bearer ${data.token}` , "Content-Type": "application/json", "x-academic-year-id": await AsyncStorage.getItem("selectedYearId") ?? "16" },
         });
         const childData = await childRes.json();
         console.log("Children response:", childData);
@@ -239,7 +240,7 @@ export default function LoginScreen() {
 
       const res = await fetch(`${API_URL}/api/login/forgot`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-academic-year-id": await AsyncStorage.getItem("selectedYearId") ?? "16" },
         body: JSON.stringify({ mobile: `${selectedCountry.code}${mobile}` }),
         signal: controller.signal,
       });

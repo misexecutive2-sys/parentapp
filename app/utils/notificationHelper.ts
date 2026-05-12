@@ -27,6 +27,7 @@ const fetchNotices = async (token: string, studentId: string): Promise<AppNotifi
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
+          "x-academic-year-id": await AsyncStorage.getItem("selectedYearId") ?? "16",
         },
       }
     );
@@ -58,6 +59,7 @@ const fetchDiary = async (token: string, studentId: string): Promise<AppNotifica
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
+        "x-academic-year-id": await AsyncStorage.getItem("selectedYearId") ?? "16",
       },
     });
     if (!res.ok) return [];

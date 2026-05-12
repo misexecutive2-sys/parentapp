@@ -114,7 +114,7 @@ export default function LicenseKeyScreen() {
     try {
       const res = await fetch(`${API_URL}/api/login/verify-license`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" ,"x-academic-year-id": await AsyncStorage.getItem("selectedYearId") ?? "16" },
         body: JSON.stringify({ license: licenseKey }),
       });
       const data = await res.json();
