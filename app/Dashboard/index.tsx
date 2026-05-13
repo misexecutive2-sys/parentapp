@@ -125,11 +125,9 @@ export default function DashboardScreen() {
       },
     ]);
   };
-
-  const onRefresh = async () => {
+const onRefresh = async () => {
   setRefreshing(true);
   await fetchAndCountNotifications();
-  await fetchYears();
   setRefreshing(false);
 };
 

@@ -15,6 +15,16 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { useTheme } from "../ThemeContext";
 import { SafeAreaView } from 'react-native-safe-area-context';
+// At the top, add these imports:
+import * as FileSystem from "expo-file-system";
+import * as Sharing from "expo-sharing";
+import { WebView } from "react-native-webview";
+
+import {
+  Modal,
+  Image,
+  Dimensions,
+} from "react-native";
 const BASE_URL = "https://connect.schoolaid.in";
 
 export default function StudentNoticeBoard() {
@@ -26,6 +36,9 @@ export default function StudentNoticeBoard() {
   const [childName, setChildName]   = useState("Student");
   const [childClass, setChildClass] = useState("—");
   const [childSection, setChildSection] = useState("—");
+ 
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+const [previewType, setPreviewType] = useState<"image" | "web" | null>(null);
 
   useEffect(() => {
     loadChild();
@@ -122,13 +135,43 @@ const res = await fetch(`${BASE_URL}/api/notices/student?student_id=${child?.id}
     }
   };
 
-  const openAttachment = (fileUrl: string) => {
-    // fileUrl may be relative like "/uploads/..." — prefix with base URL
-    const full = fileUrl.startsWith("http") ? fileUrl : `${BASE_URL}${fileUrl}`;
-    Linking.openURL(full).catch(() =>
-      Alert.alert("Error", "Could not open attachment")
-    );
-  };
+const openAttachment = (attachment: {
+  file_url: string;
+  mime_type?: string;
+  original_name?: string;
+}) => {
+  const mimeType = attachment.mime_type ?? "";
+  const fileUrl = attachment.file_url;
+  const fullUrl = fileUrl.startsWith("http")
+
+    ? fileUrl
+    : `${BASE_URL}/${fileUrl}`;
+
+  if (mimeType.startsWith("image/")) {
+    // Images → in-app image modal
+    setPreviewType("image");
+    setPreviewUrl(fullUrl);
+  } else if (
+    mimeType === "application/pdf" ||
+    mimeType === "application/msword" ||
+    mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+    mimeType === "application/vnd.ms-excel" ||
+    mimeType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+    mimeType === "application/vnd.ms-powerpoint" ||
+    mimeType === "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+  ) {
+    // Office files + PDF → Google Docs Viewer inside WebView
+    const googleViewerUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(fullUrl)}&embedded=true`;
+    setPreviewType("web");
+    setPreviewUrl(googleViewerUrl);
+  } else {
+    // Fallback → also try Google Docs Viewer
+    const googleViewerUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(fullUrl)}&embedded=true`;
+    setPreviewType("web");
+    setPreviewUrl(googleViewerUrl);
+  }
+};
+
     const getInitials = (name: string) => {
     const parts = name.trim().split(' ');
     if (parts.length >= 2) {
@@ -245,16 +288,19 @@ const res = await fetch(`${BASE_URL}/api/notices/student?student_id=${child?.id}
               </Text>
 
               {/* Attachment */}
-              {notice.file_url ? (
-                <TouchableOpacity
-                  style={styles.attachmentBtn}
-                  onPress={() => openAttachment(notice.file_url)}
-                >
-                  <Text style={[styles.attachmentText, { color: theme.primary }]}>
-                    📎 View Attachment
-                  </Text>
-                </TouchableOpacity>
-              ) : null}
+ {notice.attachments?.length > 0 &&
+  notice.attachments.map((att: any, idx: number) => (
+    <TouchableOpacity
+      key={idx}
+      style={styles.attachmentBtn}
+      onPress={() => openAttachment(att)}
+    >
+      <Text style={[styles.attachmentText, { color: theme.primary }]}>
+        📎 {att.original_name ?? "View Attachment"}
+      </Text>
+    </TouchableOpacity>
+  ))
+}
 
               {/* Meta row */}
               <View style={styles.metaRow}>
@@ -274,6 +320,60 @@ const res = await fetch(`${BASE_URL}/api/notices/student?student_id=${child?.id}
           ))
         )}
       </ScrollView>
+      {/* In-app image preview */}
+<Modal
+  visible={!!previewUrl}
+  transparent={false}
+  animationType="slide"
+  onRequestClose={() => { setPreviewUrl(null); setPreviewType(null); }}
+>
+  <SafeAreaView style={{ flex: 1, backgroundColor: "#000" }}>
+    {/* Close button */}
+    <View style={{
+      flexDirection: "row",
+      justifyContent: "flex-end",
+      padding: 12,
+      backgroundColor: "#111"
+    }}>
+      <TouchableOpacity
+        onPress={() => { setPreviewUrl(null); setPreviewType(null); }}
+        style={{
+          backgroundColor: "rgba(255,255,255,0.15)",
+          width: 36, height: 36,
+          borderRadius: 18,
+          alignItems: "center", justifyContent: "center"
+        }}
+      >
+        <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}>✕</Text>
+      </TouchableOpacity>
+    </View>
+
+    {/* Image viewer */}
+    {previewType === "image" && previewUrl && (
+      <Image
+        source={{ uri: previewUrl }}
+        style={{ flex: 1, width: "100%" }}
+        resizeMode="contain"
+      />
+    )}
+
+    {/* PDF / other file */}
+    {previewType === "web" && previewUrl && (
+      <WebView
+        source={{ uri: previewUrl }}
+        style={{ flex: 1 }}
+        startInLoadingState
+        renderLoading={() => (
+          <ActivityIndicator
+            size="large"
+            color={theme.primary}
+            style={{ flex: 1, marginTop: 40 }}
+          />
+        )}
+      />
+    )}
+  </SafeAreaView>
+</Modal>
     </SafeAreaView>
   );
 }
@@ -369,6 +469,34 @@ const styles = StyleSheet.create({
   //   fontSize: 20,
   //   fontWeight: "600",
   // },
+
+  modalOverlay: {
+  flex: 1,
+  backgroundColor: "rgba(0,0,0,0.92)",
+  alignItems: "center",
+  justifyContent: "center",
+},
+modalClose: {
+  position: "absolute",
+  top: 50,
+  right: 20,
+  zIndex: 10,
+  backgroundColor: "rgba(255,255,255,0.15)",
+  width: 40,
+  height: 40,
+  borderRadius: 20,
+  alignItems: "center",
+  justifyContent: "center",
+},
+modalCloseText: {
+  color: "#fff",
+  fontSize: 18,
+  fontWeight: "700",
+},
+previewImage: {
+  width: Dimensions.get("window").width,
+  height: Dimensions.get("window").height * 0.8,
+},
   headerTop: { 
     paddingTop: 50, 
     paddingBottom: 20, 
@@ -496,3 +624,6 @@ const styles = StyleSheet.create({
   emptyIcon:  { fontSize: 48, marginBottom: 12 },
   emptyTitle: { fontSize: 18, fontWeight: "700" },
 });
+
+
+

@@ -9,6 +9,7 @@ import { useRouter } from "expo-router";
 import { useTheme } from "../ThemeContext";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+
 const API_BASE = "https://connect.schoolaid.in";
 
 type AttendanceStatus = "P" | "A" | "L" | "H" | null;
@@ -448,6 +449,8 @@ export default function AttendanceScreen() {
 
   const [tappedDate, setTappedDate] = useState<string | null>(null);
   const [tappedLeave, setTappedLeave] = useState<LeaveRecord | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
 
   const leaveDatesSet = new Set<string>(
     leaveRecords.flatMap(r => datesBetween(r.from_date, r.to_date))
@@ -519,7 +522,7 @@ export default function AttendanceScreen() {
     try {
       const res = await fetch(`${API_BASE}/api/leaves/student?student_id=${sid}`, {
         method: "GET",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, "x-academic-year-id": await AsyncStorage.getItem("selectedYearId") ?? "16" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, "x-academic-year-id": await AsyncStorage.getItem("selectedYearId") ?? "" },
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
@@ -835,6 +838,11 @@ export default function AttendanceScreen() {
       </View>
     );
   };
+const onRefresh = async () => {
+  setRefreshing(true);
+  await fetchCalendar();
+  setRefreshing(false);
+};
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -863,75 +871,99 @@ export default function AttendanceScreen() {
         </View>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
-        //
-        {/* style={{ flex: 1 }} */}
-          refreshControl={
-            <RefreshControl
-              refreshing={loading}          // your loading state
-              onRefresh={fetchCalendar}     // function to call when pulled down
-              colors={["#0047AB"]}          // spinner color (Android)
-              tintColor="#0047AB"           // spinner color (iOS)
-            />
-          }
-        {/* Month nav */}
-        <View style={styles.monthNav}>
-          <TouchableOpacity onPress={prevMonth} style={styles.navBtn}><Text style={styles.navArrow}>{"<<"}</Text></TouchableOpacity>
-          <Text style={styles.monthLabel}>{MONTHS[currentMonth]} {currentYear}</Text>
-          <TouchableOpacity onPress={nextMonth} style={styles.navBtn}><Text style={styles.navArrow}>{">>"}</Text></TouchableOpacity>
-        </View>
+<ScrollView 
+  showsVerticalScrollIndicator={false} 
+  contentContainerStyle={{ paddingBottom: 40 }}
+  refreshControl={
+    <RefreshControl
+      refreshing={refreshing}
+      onRefresh={onRefresh}
+      colors={["#0047AB"]}
+      tintColor="#0047AB"
+    />
+  }
+>
+  {/* Month nav */}
+  <View style={styles.monthNav}>
+    <TouchableOpacity onPress={prevMonth} style={styles.navBtn}>
+      <Text style={styles.navArrow}>{"<<"}</Text>
+    </TouchableOpacity>
+    <Text style={styles.monthLabel}>{MONTHS[currentMonth]} {currentYear}</Text>
+    <TouchableOpacity onPress={nextMonth} style={styles.navBtn}>
+      <Text style={styles.navArrow}>{">>"}</Text>
+    </TouchableOpacity>
+  </View>
 
-        {/* Calendar */}
-        <View style={styles.calendarCard}>
-          {loading ? <ActivityIndicator size="large" color={PRIMARY} /> : renderCalendar()}
-        </View>
+  {/* Calendar */}
+  <View style={styles.calendarCard}>
+    {loading ? <ActivityIndicator size="large" color={PRIMARY} /> : renderCalendar()}
+  </View>
 
-        {leaveRecords.length > 0 && (
-          <View style={styles.legendRow}>
-            <View style={styles.leaveDotLegend} />
-            <Text style={styles.legendTxt}>Applied leave (tap a leave day to see reason)</Text>
-          </View>
-        )}
+  {leaveRecords.length > 0 && (
+    <View style={styles.legendRow}>
+      <View style={styles.leaveDotLegend} />
+      <Text style={styles.legendTxt}>Applied leave (tap a leave day to see reason)</Text>
+    </View>
+  )}
 
-        {/* Progress bar */}
-        {!loading && (
-          <View style={styles.percentageBar}>
-            <Text style={styles.percentageLabel}>Attendance</Text>
-            <View style={styles.progressBg}>
-              <View style={[styles.progressFill, { width: `${Math.min(Number(percentage), 100)}%` as any }]} />
-            </View>
-            <Text style={styles.percentageValue}>{percentage}%</Text>
-          </View>
-        )}
+  {/* Progress bar */}
+  {!loading && (
+    <View style={styles.percentageBar}>
+      <Text style={styles.percentageLabel}>Attendance</Text>
+      <View style={styles.progressBg}>
+        <View style={[styles.progressFill, { width: `${Math.min(Number(percentage), 100)}%` as any }]} />
+      </View>
+      <Text style={styles.percentageValue}>{percentage}%</Text>
+    </View>
+  )}
 
-        {/* Action buttons */}
-        <View style={styles.actionsGrid}>
-          <TouchableOpacity style={[styles.actionCard, { backgroundColor: PRIMARY }]} onPress={() => setActiveModal("monthly")} activeOpacity={0.85}>
-            <Text style={styles.actionCardIcon}>{"📊"}</Text>
-            <Text style={styles.actionCardText}>{"Monthly\nDetails"}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.actionCard, { backgroundColor: "#0e7490" }]} onPress={() => setActiveModal("session")} activeOpacity={0.85}>
-            <Text style={styles.actionCardIcon}>{"🕐"}</Text>
-            <Text style={styles.actionCardText}>{"Session\nWise"}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.actionCard, { backgroundColor: "#fff", borderWidth: 1.5, borderColor: PRIMARY }]}
-            onPress={() => { setLeaveFrom(""); setLeaveTo(""); setLeaveReason(""); setActiveModal("apply"); }}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.actionCardIcon}>{"📝"}</Text>
-            <Text style={[styles.actionCardText, { color: PRIMARY }]}>{"Apply\nLeave"}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.actionCard, { backgroundColor: "#ca8a04" }]}
-            onPress={() => { fetchLeaveHistory(studentId, authToken); setActiveModal("history"); }}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.actionCardIcon}>{"📋"}</Text>
-            <Text style={styles.actionCardText}>{"Leave\nHistory"}</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
+  {/* Action buttons */}
+  <View style={styles.actionsGrid}>
+    <TouchableOpacity 
+      style={[styles.actionCard, { backgroundColor: PRIMARY }]} 
+      onPress={() => setActiveModal("monthly")} 
+      activeOpacity={0.85}
+    >
+      <Text style={styles.actionCardIcon}>{"📊"}</Text>
+      <Text style={styles.actionCardText}>{"Monthly\nDetails"}</Text>
+    </TouchableOpacity>
+    
+    <TouchableOpacity 
+      style={[styles.actionCard, { backgroundColor: "#0e7490" }]} 
+      onPress={() => setActiveModal("session")} 
+      activeOpacity={0.85}
+    >
+      <Text style={styles.actionCardIcon}>{"🕐"}</Text>
+      <Text style={styles.actionCardText}>{"Session\nWise"}</Text>
+    </TouchableOpacity>
+    
+    <TouchableOpacity
+      style={[styles.actionCard, { backgroundColor: "#fff", borderWidth: 1.5, borderColor: PRIMARY }]}
+      onPress={() => { 
+        setLeaveFrom(""); 
+        setLeaveTo(""); 
+        setLeaveReason(""); 
+        setActiveModal("apply"); 
+      }}
+      activeOpacity={0.85}
+    >
+      <Text style={styles.actionCardIcon}>{"📝"}</Text>
+      <Text style={[styles.actionCardText, { color: PRIMARY }]}>{"Apply\nLeave"}</Text>
+    </TouchableOpacity>
+    
+    <TouchableOpacity
+      style={[styles.actionCard, { backgroundColor: "#ca8a04" }]}
+      onPress={() => { 
+        fetchLeaveHistory(studentId, authToken); 
+        setActiveModal("history"); 
+      }}
+      activeOpacity={0.85}
+    >
+      <Text style={styles.actionCardIcon}>{"📋"}</Text>
+      <Text style={styles.actionCardText}>{"Leave\nHistory"}</Text>
+    </TouchableOpacity>
+  </View>
+</ScrollView>
 
       {/* ── Monthly Modal ── */}
       <Modal visible={activeModal === "monthly"} animationType="slide" transparent onRequestClose={() => setActiveModal(null)}>
