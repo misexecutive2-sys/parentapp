@@ -48,7 +48,6 @@ const EMOJI_LIST = [
   "😢","😭","😤","😠","😡","🤬","😈","👿","💀","☠️",
 ];
 
-// ── Interfaces ───────────────────────────────────────────────
 interface Message {
   id: string;
   text: string;
@@ -87,7 +86,6 @@ interface SearchResult {
 
 type TabType = "chat" | "media" | "downloads";
 
-// ── Helpers ──────────────────────────────────────────────────
 const buildUrl = (url: string) =>
   url?.startsWith("http") ? url : `${BASE_URL}/${url?.replace(/^\//, "") ?? ""}`;
 
@@ -130,7 +128,6 @@ const mapRawMessage = (m: any): Message => {
   };
 };
 
-// ── VideoPlayerModal ─────────────────────────────────────────
 function VideoPlayerModal({ uri, onClose }: { uri: string; onClose: () => void }) {
   const player = useVideoPlayer({ uri }, (p) => { p.loop = false; });
   useEffect(() => {
@@ -149,7 +146,6 @@ function VideoPlayerModal({ uri, onClose }: { uri: string; onClose: () => void }
   );
 }
 
-// ── AudioPlayerModal ─────────────────────────────────────────
 function AudioPlayerModal({ uri, name, onClose }: { uri: string; name: string; onClose: () => void }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -211,7 +207,6 @@ const av = StyleSheet.create({
   playBtn: { width: 64, height: 64, borderRadius: 32, backgroundColor: PRIMARY, alignItems: "center", justifyContent: "center" },
 });
 
-// ── InAppDocViewer ───────────────────────────────────────────
 const dv = StyleSheet.create({
   header: { flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingVertical: 12, backgroundColor: "#111", gap: 10 },
   closeBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.15)", alignItems: "center", justifyContent: "center" },
@@ -295,7 +290,6 @@ function InAppDocViewer({ uri, name, onClose }: { uri: string; name: string; onC
   );
 }
 
-// ── StatusTick ───────────────────────────────────────────────
 function StatusTick({ status }: { status?: string }) {
   if (!status || status === "sending") return <Ionicons name="time-outline" size={11} color="rgba(255,255,255,0.5)" />;
   if (status === "sent") return <Ionicons name="checkmark-outline" size={11} color="rgba(255,255,255,0.7)" />;
@@ -304,7 +298,6 @@ function StatusTick({ status }: { status?: string }) {
   return null;
 }
 
-// ── Main Chat Component ───────────────────────────────────────
 export default function ChatScreen() {
   const { theme } = useTheme();
   const router = useRouter();
@@ -312,11 +305,9 @@ export default function ChatScreen() {
     threadId: string; childId: string; childName: string; classname: string; sectionname: string;
   }>();
 
-  // threadId is null when starting new chat
   const isNewChat = threadIdParam === "new";
   const [threadId, setThreadId] = useState<number | null>(isNewChat ? null : Number(threadIdParam));
 
-  // ── State ─────────────────────────────────────────────────
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState("");
   const [loading, setLoading] = useState(!isNewChat);
@@ -349,11 +340,12 @@ export default function ChatScreen() {
   const [docViewer, setDocViewer] = useState<{ uri: string; name: string } | null>(null);
   const [previewVideo, setPreviewVideo] = useState<string | null>(null);
   const [audioPlayer, setAudioPlayer] = useState<{ uri: string; name: string } | null>(null);
+  // Track whether we've done the first scroll to bottom
+  const initialScrollDone = useRef(false);
 
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [micPermission, requestMicPermission] = useMicrophonePermissions();
 
-  // ── Refs ──────────────────────────────────────────────────
   const flatListRef = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
   const contextMsgRef = useRef<Message | null>(null);
@@ -373,7 +365,6 @@ export default function ChatScreen() {
     return parts.length >= 2 ? `${parts[0][0]}${parts[1][0]}`.toUpperCase() : (name ?? "U").substring(0, 2).toUpperCase();
   };
 
-  // ── Storage ───────────────────────────────────────────────
   const loadPinned = async () => { try { const raw = await AsyncStorage.getItem(`pinnedMsgs_${childId}`); if (raw) setPinnedIds(JSON.parse(raw)); } catch {} };
   const loadSavedFiles = async () => { try { const raw = await AsyncStorage.getItem(DOWNLOADS_KEY); if (raw) setSavedFiles(JSON.parse(raw)); } catch {} };
   const persistSavedFile = async (entry: DownloadedFile) => { try { const raw = await AsyncStorage.getItem(DOWNLOADS_KEY); const current: DownloadedFile[] = raw ? JSON.parse(raw) : []; const updated = [entry, ...current.filter((f) => f.url !== entry.url)]; await AsyncStorage.setItem(DOWNLOADS_KEY, JSON.stringify(updated)); setSavedFiles(updated); } catch {} };
@@ -390,9 +381,8 @@ export default function ChatScreen() {
     } catch {}
   };
 
-  // ── Fetch messages ────────────────────────────────────────
-  const fetchMessages = useCallback(async (t: string, tid: number) => {
-    setLoading(true);
+  // ── Fetch messages — FIXED: scroll to bottom after load ───
+  const fetchMessages = useCallback(async (t: string, tid: number, scrollAfter = false) => {
     try {
       const yearId = (await AsyncStorage.getItem("selectedYearId")) ?? "16";
       const res = await fetch(`${BASE_URL}/api/parent-notes/threads/${tid}/messages`, {
@@ -401,37 +391,78 @@ export default function ChatScreen() {
       if (!res.ok) { setMessages([]); return; }
       const data = await res.json();
       const raw: any[] = data.data ?? data ?? [];
-      setMessages(raw.sort((a: any, b: any) => new Date(a.created_at ?? a.createdAt).getTime() - new Date(b.created_at ?? b.createdAt).getTime()).map(mapRawMessage));
+      // Sort ascending (oldest → newest) so the list reads top-to-bottom
+      const sorted = raw
+        .sort((a: any, b: any) => new Date(a.created_at ?? a.createdAt).getTime() - new Date(b.created_at ?? b.createdAt).getTime())
+        .map(mapRawMessage);
+      setMessages(sorted);
+      // Scroll to the latest message after data arrives
+      if (scrollAfter || !initialScrollDone.current) {
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: !initialScrollDone.current ? false : true });
+          initialScrollDone.current = true;
+        }, 120);
+      }
     } catch (err) { console.error(err); }
-    finally { setLoading(false); }
   }, []);
 
   // ── Init ──────────────────────────────────────────────────
   useFocusEffect(useCallback(() => {
+    initialScrollDone.current = false;
     const init = async () => {
       const t = await AsyncStorage.getItem("token");
       if (!t) return;
       setToken(t);
-      if (!isNewChat && threadId) await fetchMessages(t, threadId);
-      else setLoading(false);
+      if (!isNewChat && threadId) {
+        setLoading(true);
+        await fetchMessages(t, threadId, true);
+        setLoading(false);
+      } else {
+        setLoading(false);
+      }
       await loadPinned();
       await loadSavedFiles();
     };
     init();
   }, [threadId]));
 
-  // ── Poll read status ──────────────────────────────────────
+  // ── Background poll every 5s for new incoming messages ───
   useEffect(() => {
     if (!token || !threadId) return;
     const interval = setInterval(async () => {
       try {
-        const res = await fetch(`${BASE_URL}/api/parent-notes/threads/${threadId}/messages`, { headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "x-academic-year-id": (await AsyncStorage.getItem("selectedYearId")) ?? "16" } });
+        const yearId = (await AsyncStorage.getItem("selectedYearId")) ?? "16";
+        const res = await fetch(`${BASE_URL}/api/parent-notes/threads/${threadId}/messages`, {
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "x-academic-year-id": yearId },
+        });
         if (!res.ok) return;
         const data = await res.json();
-        const msgs: any[] = data.data ?? data ?? [];
-        setMessages((prev) => { const hasUnread = prev.some((m) => m.sender === "parent" && m.status !== "read"); if (!hasUnread) return prev; return prev.map((m) => { if (m.sender !== "parent" || m.status === "read") return m; const sm = msgs.find((x) => String(x.id) === String(m.id)); if (!sm) return m; const ns = sm.is_read ? "read" : sm.is_delivered ? "delivered" : "sent"; return ns !== m.status ? { ...m, status: ns } : m; }); });
+        const raw: any[] = data.data ?? data ?? [];
+        const sorted = raw
+          .sort((a: any, b: any) => new Date(a.created_at ?? a.createdAt).getTime() - new Date(b.created_at ?? b.createdAt).getTime())
+          .map(mapRawMessage);
+
+        setMessages((prev) => {
+          // Check if there are new messages we don't have yet
+          const prevIds = new Set(prev.map((m) => m.id));
+          const hasNew = sorted.some((m) => !prevIds.has(m.id));
+
+          // Also update read statuses for sent messages
+          const updated = sorted.map((incoming) => {
+            const existing = prev.find((p) => p.id === incoming.id);
+            // Preserve optimistic status if server hasn't confirmed yet
+            if (existing && existing.sender === "parent" && existing.status === "sending") return existing;
+            return incoming;
+          });
+
+          if (hasNew) {
+            // Scroll to bottom when a new message arrives
+            setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+          }
+          return updated;
+        });
       } catch {}
-    }, 5000);
+    }, 5_000);
     return () => clearInterval(interval);
   }, [token, threadId]);
 
@@ -452,10 +483,12 @@ export default function ChatScreen() {
       }
     });
     setGlobalSearchResults(results);
-    if (results.length > 0 && activeTab === "chat") { const idx = messages.findIndex((m) => m.id === results[0].message.id); if (idx !== -1) setTimeout(() => flatListRef.current?.scrollToIndex({ index: idx, animated: true, viewPosition: 0.3 }), 100); }
+    if (results.length > 0 && activeTab === "chat") {
+      const idx = messages.findIndex((m) => m.id === results[0].message.id);
+      if (idx !== -1) setTimeout(() => flatListRef.current?.scrollToIndex({ index: idx, animated: true, viewPosition: 0.3 }), 100);
+    }
   }, [searchQuery, messages, activeTab]);
 
-  // ── Viewers ───────────────────────────────────────────────
   const closeAllViewers = useCallback(() => { setDocViewer(null); setPreviewVideo(null); setAudioPlayer(null); setPreviewItem(null); }, []);
   const openInApp = useCallback(async (uri: string, name: string) => {
     if (!uri) { Alert.alert("Error", "No file URL found."); return; }
@@ -475,7 +508,6 @@ export default function ChatScreen() {
     setDocViewer({ uri: fullUrl, name: displayName });
   }, [closeAllViewers]);
 
-  // ── Download ──────────────────────────────────────────────
   const downloadFile = async (url: string, name: string, type: "file" | "video") => {
     const key = url;
     if (downloads[key] === "downloading") return;
@@ -502,24 +534,20 @@ export default function ChatScreen() {
     return <TouchableOpacity onPress={() => downloadFile(url, name, type)} style={styles.downloadBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><Ionicons name={state === "done" || alreadySaved ? "checkmark-circle" : "arrow-down-circle-outline"} size={22} color={state === "done" || alreadySaved ? "#22C55E" : tintColor} /></TouchableOpacity>;
   };
 
-  // ── Refresh ───────────────────────────────────────────────
   const handleRefreshMedia = async () => { setRefreshingMedia(true); if (threadId) await fetchMessages(token, threadId); setRefreshingMedia(false); };
   const handleRefreshDownloads = async () => { setRefreshingDownloads(true); await loadSavedFiles(); setRefreshingDownloads(false); };
 
-  // ── Pickers ───────────────────────────────────────────────
   const pickImage = async () => { const permission = await ImagePicker.requestMediaLibraryPermissionsAsync(); if (!permission.granted) { Alert.alert("Permission required", "Please allow access to your photo library."); return; } const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.8, allowsMultipleSelection: true }); if (!result.canceled && result.assets.length > 0) setAttachments((prev) => [...prev, ...result.assets.map((a) => ({ uri: a.uri, type: "image" as const, name: a.fileName ?? "image.jpg", mimeType: a.mimeType ?? "image/jpeg" }))]); };
   const pickFile = async () => { const result = await DocumentPicker.getDocumentAsync({ type: "*/*", copyToCacheDirectory: true, multiple: true }); if (!result.canceled && result.assets.length > 0) setAttachments((prev) => [...prev, ...result.assets.map((a) => ({ uri: a.uri, type: "file" as const, name: a.name, mimeType: a.mimeType ?? "application/octet-stream" }))]); };
   const openCamera = async () => { if (!cameraPermission?.granted) { const { granted } = await requestCameraPermission(); if (!granted) { Alert.alert("Permission required", "Please allow camera access."); return; } } if (!micPermission?.granted) { const { granted } = await requestMicPermission(); if (!granted) { Alert.alert("Permission required", "Please allow microphone access."); return; } } setShowCamera(true); };
   const showAttachmentOptions = () => Alert.alert("Attach", "Choose attachment type", [{ text: "Photo", onPress: pickImage }, { text: "File", onPress: pickFile }, { text: "Video", onPress: openCamera }, { text: "Cancel", style: "cancel" }]);
   const removeAttachment = (idx: number) => setAttachments((prev) => prev.filter((_, i) => i !== idx));
 
-  // ── Recording ─────────────────────────────────────────────
   const startRecording = async () => { try { const { granted } = await Audio.requestPermissionsAsync(); if (!granted) { Alert.alert("Permission required", "Please allow microphone access."); return; } await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true }); const { recording } = await Audio.Recording.createAsync({ android: { extension: ".m4a", outputFormat: Audio.AndroidOutputFormat.MPEG_4, audioEncoder: Audio.AndroidAudioEncoder.AAC, sampleRate: 44100, numberOfChannels: 2, bitRate: 128000 }, ios: { extension: ".m4a", outputFormat: Audio.IOSOutputFormat.MPEG4AAC, audioQuality: Audio.IOSAudioQuality.HIGH, sampleRate: 44100, numberOfChannels: 2, bitRate: 128000, linearPCMBitDepth: 16, linearPCMIsBigEndian: false, linearPCMIsFloat: false }, web: {} }); recordingRef.current = recording; setIsRecording(true); } catch { Alert.alert("Error", "Could not start recording."); } };
   const stopRecording = async () => { if (!recordingRef.current) return; setIsRecording(false); setIsTranscribing(true); try { const recording = recordingRef.current; recordingRef.current = null; await recording.stopAndUnloadAsync(); await Audio.setAudioModeAsync({ allowsRecordingIOS: false }); const tempUri = recording.getURI(); if (!tempUri) throw new Error("No recording URI"); const baseDir = FileSystem.documentDirectory ?? FileSystem.cacheDirectory; if (!baseDir) throw new Error("No writable directory"); const fileName = `voice_${Date.now()}.m4a`; const permanentUri = `${baseDir}${fileName}`; await FileSystem.copyAsync({ from: tempUri, to: permanentUri }); const fileInfo = (await FileSystem.getInfoAsync(permanentUri)) as any; if (!fileInfo.exists || (fileInfo.size ?? 0) === 0) throw new Error("Recording file empty"); setAttachments((prev) => [...prev, { uri: permanentUri, type: "file", name: fileName, mimeType: "audio/m4a" }]); } catch { Alert.alert("Error", "Could not process recording."); } finally { setIsTranscribing(false); } };
   const startVideoRecording = async () => { if (!cameraRef.current) return; try { setIsVideoRecording(true); const video = await cameraRef.current.recordAsync({ maxDuration: 60 }); if (!video?.uri) throw new Error("No video URI"); const fileName = `video_${Date.now()}.mp4`; const baseDir = FileSystem.documentDirectory ?? FileSystem.cacheDirectory ?? ""; const permanentUri = `${baseDir}${fileName}`; await FileSystem.copyAsync({ from: video.uri, to: permanentUri }); const fileInfo = await FileSystem.getInfoAsync(permanentUri); if (!fileInfo.exists) throw new Error("Video file missing"); setAttachments((prev) => [...prev, { uri: permanentUri, type: "video", name: fileName, mimeType: "video/mp4" }]); setShowCamera(false); } catch { Alert.alert("Error", "Could not record video."); } finally { setIsVideoRecording(false); } };
   const stopVideoRecording = () => cameraRef.current?.stopRecording();
 
-  // ── Context menu ──────────────────────────────────────────
   const handleCopy = useCallback(() => { const msg = contextMsgRef.current; if (msg?.text) Clipboard.setString(msg.text); setContextMsg(null); }, []);
   const handleReply = useCallback(() => { setReplyTo(contextMsgRef.current); setEditingMsg(null); setContextMsg(null); setTimeout(() => inputRef.current?.focus(), 150); }, []);
   const handleEdit = useCallback(() => { const msg = contextMsgRef.current; if (!msg) return; setEditingMsg(msg); setReplyTo(null); setInputText(msg.text); setContextMsg(null); setTimeout(() => inputRef.current?.focus(), 150); }, []);
@@ -554,6 +582,8 @@ export default function ChatScreen() {
 
     const tempMsg: Message = { id: String(Date.now()), text: sentText, sender: "parent", createdAt: new Date().toISOString(), attachmentUrl: sentFiles[0]?.uri, attachmentType: sentFiles[0]?.type, attachmentName: sentFiles[0]?.name, replyToId: sentReplyTo?.id, replyToText: sentReplyTo?.text || sentReplyTo?.attachmentName, status: "sending" };
     setMessages((prev) => [...prev, tempMsg]);
+    // Scroll to show the message we just added
+    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 80);
 
     try {
       const yearId = (await AsyncStorage.getItem("selectedYearId")) ?? "16";
@@ -589,21 +619,29 @@ export default function ChatScreen() {
       }
 
       setMessages((prev) => prev.map((m) => (m.id === tempMsg.id ? { ...m, status: "sent" } : m)));
-      if (finalThreadId) await fetchMessages(token, finalThreadId);
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+      // Fetch fresh list and scroll to bottom
+      if (finalThreadId) await fetchMessages(token, finalThreadId, true);
     } catch {
       setMessages((prev) => prev.filter((m) => m.id !== tempMsg.id));
       Alert.alert("Error", "Could not send message. Please try again.");
     } finally { setSending(false); }
   };
 
-  // ── Derived ───────────────────────────────────────────────
-  const filteredMessages = searchQuery.trim() ? messages.filter((m) => { const q = searchQuery.toLowerCase(); return m.text?.toLowerCase().includes(q) || m.attachmentName?.toLowerCase().includes(q) || formatDate(m.createdAt).toLowerCase().includes(q); }) : messages;
+  const filteredMessages = searchQuery.trim()
+    ? messages.filter((m) => {
+        const q = searchQuery.toLowerCase();
+        return m.text?.toLowerCase().includes(q) || m.attachmentName?.toLowerCase().includes(q) || formatDate(m.createdAt).toLowerCase().includes(q);
+      })
+    : messages;
 
   const groupedMessages = () => {
     const result: (Message | { type: "date"; label: string; id: string })[] = [];
     let lastDate = "";
-    filteredMessages.forEach((m) => { const dateLabel = formatDate(m.createdAt); if (dateLabel !== lastDate) { result.push({ type: "date", label: dateLabel, id: `date_${dateLabel}` }); lastDate = dateLabel; } result.push(m); });
+    filteredMessages.forEach((m) => {
+      const dateLabel = formatDate(m.createdAt);
+      if (dateLabel !== lastDate) { result.push({ type: "date", label: dateLabel, id: `date_${dateLabel}` }); lastDate = dateLabel; }
+      result.push(m);
+    });
     return result;
   };
 
@@ -612,7 +650,6 @@ export default function ChatScreen() {
   const voiceMessages = messages.filter((m) => m.attachmentName?.endsWith(".m4a") || m.attachmentName?.includes("voice_") || m.attachmentUrl?.endsWith(".m4a") || m.attachmentUrl?.includes("voice_"));
   const pinnedMessages = messages.filter((m) => pinnedIds.includes(m.id));
 
-  // ── Render message ────────────────────────────────────────
   const renderMessage = ({ item }: { item: any }) => {
     if (item.type === "date") return <View style={styles.dateSeparator}><View style={styles.dateLine} /><Text style={styles.dateLabel}>{item.label}</Text><View style={styles.dateLine} /></View>;
     const msg: Message = item;
@@ -676,7 +713,6 @@ export default function ChatScreen() {
     );
   };
 
-  // ── Media tab ─────────────────────────────────────────────
   const renderMediaGallery = () => (
     <View style={{ flex: 1, backgroundColor: "#F0F4FB" }}>
       <View style={styles.subTabBar}>
@@ -712,7 +748,6 @@ export default function ChatScreen() {
     </View>
   );
 
-  // ── Downloads tab ─────────────────────────────────────────
   const renderDownloads = () => {
     const formatSize = (bytes?: number) => { if (!bytes) return ""; if (bytes < 1024) return `${bytes} B`; if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`; return `${(bytes / 1048576).toFixed(1)} MB`; };
     const formatSavedDate = (iso: string) => { const d = new Date(iso); return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) + " · " + d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }); };
@@ -734,14 +769,12 @@ export default function ChatScreen() {
     );
   };
 
-  // ── JSX ───────────────────────────────────────────────────
   const threadNumber = threadIdParam !== "new" ? threadIdParam : "New";
 
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={PRIMARY} />
 
-      {/* Header */}
       <View style={[styles.header, { backgroundColor: PRIMARY }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.headerBtn}>
           <Ionicons name="arrow-back-outline" size={20} color="#fff" />
@@ -763,7 +796,6 @@ export default function ChatScreen() {
         </View>
       </View>
 
-      {/* Tab bar */}
       <View style={styles.tabBar}>
         {(["chat", "media", "downloads"] as TabType[]).map((tab) => (
           <TouchableOpacity key={tab} style={[styles.tab, activeTab === tab && styles.tabActive]} onPress={() => setActiveTab(tab)}>
@@ -773,7 +805,6 @@ export default function ChatScreen() {
         ))}
       </View>
 
-      {/* Search bar */}
       {showSearch && (
         <View style={styles.searchBar}>
           <Ionicons name="search-outline" size={16} color="#9CA3AF" />
@@ -782,7 +813,6 @@ export default function ChatScreen() {
         </View>
       )}
 
-      {/* Pinned banner */}
       {pinnedMessages.length > 0 && activeTab === "chat" && (
         <View style={styles.pinnedBanner}>
           <Ionicons name="pin" size={12} color="#92400E" />
@@ -792,14 +822,25 @@ export default function ChatScreen() {
         </View>
       )}
 
-      {/* Tab content */}
       {activeTab === "media" ? renderMediaGallery() : activeTab === "downloads" ? renderDownloads() : (
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={0}>
           {loading ? (
             <View style={styles.loadingWrap}><ActivityIndicator size="large" color={PRIMARY} /><Text style={styles.loadingText}>Loading messages...</Text></View>
           ) : (
-            <FlatList ref={flatListRef} data={groupedMessages()} keyExtractor={(item) => (item as any).id} renderItem={renderMessage} removeClippedSubviews contentContainerStyle={styles.list}
-              onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+            <FlatList
+              ref={flatListRef}
+              data={groupedMessages()}
+              keyExtractor={(item) => (item as any).id}
+              renderItem={renderMessage}
+              removeClippedSubviews
+              contentContainerStyle={styles.list}
+              // Scroll to bottom when content loads for the first time
+              onLayout={() => {
+                if (!initialScrollDone.current && messages.length > 0) {
+                  flatListRef.current?.scrollToEnd({ animated: false });
+                  initialScrollDone.current = true;
+                }
+              }}
               onScrollToIndexFailed={(info) => setTimeout(() => flatListRef.current?.scrollToIndex({ index: info.index, animated: true }), 300)}
               onTouchStart={() => { if (showEmojiPicker) setShowEmojiPicker(false); }}
               ListEmptyComponent={
@@ -812,7 +853,6 @@ export default function ChatScreen() {
             />
           )}
 
-          {/* New chat banner */}
           {isNewChat && messages.length === 0 && (
             <View style={styles.newChatBanner}>
               <Ionicons name="chatbubble-outline" size={14} color={PRIMARY} />
@@ -871,7 +911,6 @@ export default function ChatScreen() {
         </KeyboardAvoidingView>
       )}
 
-      {/* Camera */}
       <Modal visible={showCamera} animationType="slide" onRequestClose={() => { if (isVideoRecording) stopVideoRecording(); setShowCamera(false); }}>
         <View style={{ flex: 1, backgroundColor: "#000" }}>
           <CameraView ref={cameraRef} style={StyleSheet.absoluteFillObject} facing={cameraFacing} mode="video" />
@@ -887,13 +926,11 @@ export default function ChatScreen() {
         </View>
       </Modal>
 
-      {/* Viewers */}
       {previewVideo && <VideoPlayerModal uri={previewVideo} onClose={() => setPreviewVideo(null)} />}
       {audioPlayer && <AudioPlayerModal key={audioPlayer.uri} uri={audioPlayer.uri} name={audioPlayer.name} onClose={() => setAudioPlayer(null)} />}
       {docViewer && <InAppDocViewer key={docViewer.uri} uri={docViewer.uri} name={docViewer.name} onClose={() => setDocViewer(null)} />}
       {previewItem?.type === "image" && <Modal visible animationType="slide" transparent onRequestClose={() => setPreviewItem(null)}><View style={styles.previewModal}><TouchableOpacity style={styles.previewClose} onPress={() => setPreviewItem(null)}><Ionicons name="close" size={28} color="#fff" /></TouchableOpacity><Image source={{ uri: previewItem.uri }} style={styles.fullImage} resizeMode="contain" /></View></Modal>}
 
-      {/* Context menu */}
       <Modal visible={!!contextMsg} transparent animationType="fade" onRequestClose={() => setContextMsg(null)}>
         <Pressable style={styles.modalOverlay} onPress={() => setContextMsg(null)}>
           <View style={styles.contextMenu}>
@@ -910,7 +947,6 @@ export default function ChatScreen() {
   );
 }
 
-// ── Styles ────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#F0F4FB" },
   header: { flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingTop: 14, paddingBottom: 14, gap: 8 },

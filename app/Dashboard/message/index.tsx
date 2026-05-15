@@ -1,4 +1,4 @@
-import React, { useState, useCallback ,useEffect} from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -10,11 +10,9 @@ import {
   StatusBar,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useRouter, useLocalSearchParams, useFocusEffect  } from "expo-router";
+import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
-
-
 
 const BASE_URL = "https://connect.schoolaid.in";
 const PRIMARY = "#0047AB";
@@ -23,7 +21,7 @@ interface ThreadItem {
   id: number;
   preview: string;
   createdAt: string;
-  unreadCount?: number;
+  unreadCount: number;
 }
 
 const formatDate = (iso: string) => {
@@ -44,6 +42,20 @@ const getInitials = (name: string) => {
     : (name ?? "U").substring(0, 2).toUpperCase();
 };
 
+const isUnread = (msg: any): boolean => {
+  if (msg.sender_type !== "teacher") return false;
+  const readValue =
+    msg.is_read ?? msg.isRead ?? msg.read ?? msg.read_at ?? msg.readAt ?? null;
+  if (readValue === null || readValue === undefined) return false;
+  if (typeof readValue === "boolean") return !readValue;
+  if (typeof readValue === "string") return readValue === "0" || readValue === "false" || readValue === "";
+  if (typeof readValue === "number") return readValue === 0;
+  return false;
+};
+
+const getMsgTimestamp = (msg: any): string =>
+  msg.created_at ?? msg.createdAt ?? msg.timestamp ?? new Date(0).toISOString();
+
 export default function ThreadListScreen() {
   const router = useRouter();
   const { childId, childName, classname, sectionname } = useLocalSearchParams<{
@@ -56,15 +68,19 @@ export default function ThreadListScreen() {
   const [threads, setThreads] = useState<ThreadItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [token, setToken] = useState("");
 
-  // ── Fetch threads ──────────────────────────────────────────
-const fetchThreads = useCallback(async (t: string): Promise<ThreadItem[]> => {
-  try {
-    const yearId = (await AsyncStorage.getItem("selectedYearId")) ?? "16";
-    let serverThreads: ThreadItem[] = [];
+  const tokenRef = useRef("");
+  // Track whether we've done the first load so polls don't show a spinner
+  const initialLoadDone = useRef(false);
 
+  // ── Fetch threads ───────────────────────────────────────────
+  const fetchThreads = useCallback(async (t: string, showLoader = false) => {
+    if (!t) return;
+    // Only show the full-screen loader on first load, not on background polls
+    if (showLoader) setLoading(true);
     try {
+      const yearId = (await AsyncStorage.getItem("selectedYearId")) ?? "16";
+
       const res = await fetch(
         `${BASE_URL}/api/parent-notes/threads?student_id=${childId}`,
         {
@@ -75,250 +91,206 @@ const fetchThreads = useCallback(async (t: string): Promise<ThreadItem[]> => {
           },
         },
       );
-      if (res.ok) {
-        const data = await res.json();
-        const list: any[] = data.data ?? data ?? [];
 
-        // For each thread fetch its messages to get latest message + unread count
-        const threadsWithDetails = await Promise.all(
-          list.map(async (th: any) => {
-            const threadId = Number(th.id ?? th.thread_id);
-            try {
-              const msgRes = await fetch(
-                `${BASE_URL}/api/parent-notes/threads/${threadId}/messages`,
-                {
-                  headers: {
-                    Authorization: `Bearer ${t}`,
-                    "Content-Type": "application/json",
-                    "x-academic-year-id": yearId,
-                  },
+      if (!res.ok) return;
+
+      const data = await res.json();
+      const list: any[] = data.data ?? data ?? [];
+
+      const settled = await Promise.allSettled(
+        list.map(async (th: any) => {
+          const threadId = Number(th.id ?? th.thread_id);
+
+          try {
+            const msgRes = await fetch(
+              `${BASE_URL}/api/parent-notes/threads/${threadId}/messages`,
+              {
+                headers: {
+                  Authorization: `Bearer ${t}`,
+                  "Content-Type": "application/json",
+                  "x-academic-year-id": yearId,
                 },
-              );
-              if (msgRes.ok) {
-                const msgData = await msgRes.json();
-                const msgs: any[] = msgData.data ?? msgData ?? [];
+              },
+            );
 
-                // Sort messages by date
-                msgs.sort(
-                  (a, b) =>
-                    new Date(a.created_at ?? a.createdAt).getTime() -
-                    new Date(b.created_at ?? b.createdAt).getTime(),
-                );
+            if (!msgRes.ok) throw new Error("msg fetch failed");
 
-                const lastMsg = msgs[msgs.length - 1];
+            const msgData = await msgRes.json();
+            const msgs: any[] = msgData.data ?? msgData ?? [];
 
-                // Count unread — messages from teacher that are not read
-                const unreadCount = msgs.filter(
-                  (m) => m.sender_type === "teacher" && !m.is_read,
-                ).length;
+            msgs.sort(
+              (a, b) =>
+                new Date(getMsgTimestamp(a)).getTime() -
+                new Date(getMsgTimestamp(b)).getTime(),
+            );
 
-                // Build preview text
-                let preview = "Tap to view conversation";
-                if (lastMsg) {
-                  if (lastMsg.message || lastMsg.text) {
-                    try {
-                      preview = decodeURIComponent(
-                        lastMsg.message ?? lastMsg.text ?? "",
-                      );
-                    } catch {
-                      preview = lastMsg.message ?? lastMsg.text ?? "";
-                    }
-                  } else if (lastMsg.attachment_url) {
-                    const ext =
-                      lastMsg.attachment_name
-                        ?.split(".")
-                        .pop()
-                        ?.toLowerCase() ?? "";
-                    if (["jpg", "jpeg", "png", "gif", "webp"].includes(ext))
-                      preview = "📷 Photo";
-                    else if (ext === "mp4" || lastMsg.attachment_name?.includes("video_"))
-                      preview = "🎥 Video";
-                    else if (ext === "m4a" || lastMsg.attachment_name?.includes("voice_"))
-                      preview = "🎙️ Voice note";
-                    else preview = "📎 File";
-                  }
+            const lastMsg = msgs[msgs.length - 1];
+            const unreadCount = msgs.filter(isUnread).length;
+
+            let preview = "Tap to view conversation";
+            if (lastMsg) {
+              if (lastMsg.message || lastMsg.text || lastMsg.body) {
+                const raw = lastMsg.message ?? lastMsg.text ?? lastMsg.body ?? "";
+                try {
+                  preview = decodeURIComponent(raw);
+                } catch {
+                  preview = raw;
                 }
-
-                return {
-                  id: threadId,
-                  preview,
-                  // Use last message date for sorting (WhatsApp style)
-                  createdAt: lastMsg
-                    ? (lastMsg.created_at ?? lastMsg.createdAt ?? th.created_at ?? new Date().toISOString())
-                    : (th.created_at ?? th.createdAt ?? new Date().toISOString()),
-                  unreadCount,
-                };
+              } else if (lastMsg.attachment_url) {
+                const ext =
+                  (lastMsg.attachment_name ?? lastMsg.attachment_url)
+                    .split(".")
+                    .pop()
+                    ?.toLowerCase() ?? "";
+                if (["jpg", "jpeg", "png", "gif", "webp"].includes(ext)) preview = "📷 Photo";
+                else if (ext === "mp4" || lastMsg.attachment_name?.includes("video_")) preview = "🎥 Video";
+                else if (ext === "m4a" || lastMsg.attachment_name?.includes("voice_")) preview = "🎙️ Voice note";
+                else preview = "📎 File";
               }
-            } catch {}
+            }
 
-            // Fallback if message fetch fails
+            // Use last message timestamp so the thread bubbles up when someone replies
+            const lastActivityAt = lastMsg
+              ? getMsgTimestamp(lastMsg)
+              : (th.updated_at ?? th.updatedAt ?? th.created_at ?? th.createdAt ?? new Date().toISOString());
+
+            return {
+              id: threadId,
+              preview,
+              createdAt: lastActivityAt,
+              unreadCount,
+            } as ThreadItem;
+          } catch {
             return {
               id: threadId,
               preview: th.last_message ?? th.preview ?? "Tap to view conversation",
-              createdAt: th.created_at ?? th.createdAt ?? new Date().toISOString(),
-              unreadCount: th.unread_count ?? 0,
-            };
-          }),
-        );
+              createdAt: th.updated_at ?? th.updatedAt ?? th.created_at ?? th.createdAt ?? new Date().toISOString(),
+              unreadCount: Number(th.unread_count ?? 0),
+            } as ThreadItem;
+          }
+        }),
+      );
 
-        serverThreads = threadsWithDetails;
-      }
-    } catch {}
+      const serverThreads: ThreadItem[] = settled
+        .filter((r): r is PromiseFulfilledResult<ThreadItem> => r.status === "fulfilled")
+        .map((r) => r.value);
 
-    // Merge with local cache
-    const savedRaw = await AsyncStorage.getItem(`allThreadIds_${childId}`);
-    const localIds: number[] = savedRaw ? JSON.parse(savedRaw) : [];
-    const serverIds = serverThreads.map((th) => th.id);
-    const missingIds = localIds.filter((id) => !serverIds.includes(id));
-    const previewsRaw = await AsyncStorage.getItem(`threadPreviews_${childId}`);
-    const savedPreviews: Record<number, { preview: string; createdAt: string }> =
-      previewsRaw ? JSON.parse(previewsRaw) : {};
-    const missingThreads: ThreadItem[] = missingIds.map((id) => ({
-      id,
-      preview: savedPreviews[id]?.preview ?? "Tap to view conversation",
-      createdAt: savedPreviews[id]?.createdAt ?? new Date().toISOString(),
-    }));
+      // Sort: most recently active thread first
+      serverThreads.sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      );
 
-    const allThreads = [...serverThreads, ...missingThreads].sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-    );
+      setThreads(serverThreads);
 
-    await AsyncStorage.setItem(
-      `allThreadIds_${childId}`,
-      JSON.stringify(allThreads.map((th) => th.id)),
-    );
+      await AsyncStorage.setItem(
+        `allThreadIds_${childId}`,
+        JSON.stringify(serverThreads.map((th) => th.id)),
+      );
+    } catch (err) {
+      console.error("fetchThreads error:", err);
+    } finally {
+      if (showLoader) setLoading(false);
+    }
+  }, [childId]);
 
-    setThreads(allThreads);
-    return allThreads;
-  } catch {
-    return [];
-  }
-}, [childId]);
+  // ── Init on screen focus ────────────────────────────────────
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
 
-  // ── Init ───────────────────────────────────────────────────
-// Auto-poll every 10 seconds for new messages (WhatsApp style)
+      const init = async () => {
+        const t = await AsyncStorage.getItem("token");
+        if (!t || cancelled) return;
+        tokenRef.current = t;
 
-useEffect(() => {
-  if (!token) return;
-  const interval = setInterval(async () => {
-    await fetchThreads(token);
-  }, 10000);
-  return () => clearInterval(interval);
-}, [token]);
+        if (!initialLoadDone.current) {
+          // First ever load — show the spinner
+          await fetchThreads(t, true);
+          if (!cancelled) initialLoadDone.current = true;
+        } else {
+          // Coming back from a chat — silently refresh so the updated thread
+          // bubbles to the top without showing a loading screen
+          fetchThreads(t, false);
+        }
+      };
 
+      init();
+      return () => { cancelled = true; };
+    }, [fetchThreads]),
+  );
+
+  // ── Auto-poll every 10 s ────────────────────────────────────
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (tokenRef.current) fetchThreads(tokenRef.current, false);
+    }, 10_000);
+    return () => clearInterval(interval);
+  }, [fetchThreads]);
+
+  // ── Pull-to-refresh ─────────────────────────────────────────
   const handleRefresh = async () => {
     setRefreshing(true);
-    await fetchThreads(token);
+    await fetchThreads(tokenRef.current, false);
     setRefreshing(false);
   };
 
-const openThread = (threadId: number) => {
-  router.push({
-    pathname: "/Dashboard/message/[threadId]",
-    params: {
-      threadId: String(threadId),
-      childId,
-      childName,
-      classname,
-      sectionname,
-    },
-  });
-};
+  // ── Navigation ──────────────────────────────────────────────
+  const openThread = (threadId: number) => {
+    router.push({
+      pathname: "/Dashboard/message/[threadId]",
+      params: { threadId: String(threadId), childId, childName, classname, sectionname },
+    });
+  };
 
-const startNewChat = () => {
-  router.push({
-    pathname: "/Dashboard/message/[threadId]",
-    params: {
-      threadId: "new",
-      childId,
-      childName,
-      classname,
-      sectionname,
-    },
-  });
-};
+  const startNewChat = () => {
+    router.push({
+      pathname: "/Dashboard/message/[threadId]",
+      params: { threadId: "new", childId, childName, classname, sectionname },
+    });
+  };
 
-  // ── Render thread row ──────────────────────────────────────
-  // const renderThread = ({ item, index }: { item: ThreadItem; index: number }) => (
-  //   <TouchableOpacity
-  //     style={styles.threadRow}
-  //     onPress={() => openThread(item.id)}
-  //     activeOpacity={0.75}
-  //   >
-  //     {/* Avatar */}
-  //     <View style={styles.avatar}>
-  //       <Ionicons name="chatbubble-ellipses" size={22} color={PRIMARY} />
-  //     </View>
-
-  //     {/* Content */}
-  //     <View style={{ flex: 1, minWidth: 0 }}>
-  //       <View style={styles.threadTop}>
-  //         <Text style={styles.threadTitle}>
-  //           Conversation {threads.length - index}
-  //         </Text>
-  //         <Text style={styles.threadDate}>{formatDate(item.createdAt)}</Text>
-  //       </View>
-  //       <View style={styles.threadBottom}>
-  //         <Text style={styles.threadPreview} numberOfLines={1}>
-  //           {item.preview || "Tap to view conversation"}
-  //         </Text>
-  //         {!!item.unreadCount && item.unreadCount > 0 && (
-  //           <View style={styles.unreadBadge}>
-  //             <Text style={styles.unreadText}>{item.unreadCount}</Text>
-  //           </View>
-  //         )}
-  //       </View>
-  //     </View>
-
-  //     <Ionicons name="chevron-forward" size={16} color="#D1D5DB" style={{ marginLeft: 8 }} />
-  //   </TouchableOpacity>
-  // );
-
+  // ── Render one thread row ───────────────────────────────────
   const renderThread = ({ item, index }: { item: ThreadItem; index: number }) => (
-  <TouchableOpacity
-    style={styles.threadRow}
-    onPress={() => {
-      console.log("🔴 TAPPED thread id:", item.id);
-      console.log("🔴 childId:", childId);
-      console.log("🔴 childName:", childName);
-      openThread(item.id);
-    }}
-    activeOpacity={0.75}
-  >
-    {/* Avatar */}
-    <View style={styles.avatar}>
-      <Ionicons name="chatbubble-ellipses" size={22} color={PRIMARY} />
-    </View>
-
-    {/* Content */}
-    <View style={{ flex: 1, minWidth: 0 }}>
-      <View style={styles.threadTop}>
-        <Text style={styles.threadTitle}>
-          Conversation {threads.length - index}
-        </Text>
-        <Text style={styles.threadDate}>{formatDate(item.createdAt)}</Text>
+    <TouchableOpacity
+      style={styles.threadRow}
+      onPress={() => openThread(item.id)}
+      activeOpacity={0.75}
+    >
+      <View style={styles.avatar}>
+        <Ionicons name="chatbubble-ellipses" size={22} color={PRIMARY} />
       </View>
-      <View style={styles.threadBottom}>
-        <Text style={styles.threadPreview} numberOfLines={1}>
-          {item.preview || "Tap to view conversation"}
-        </Text>
-        {!!item.unreadCount && item.unreadCount > 0 && (
-          <View style={styles.unreadBadge}>
-            <Text style={styles.unreadText}>{item.unreadCount}</Text>
-          </View>
-        )}
+
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <View style={styles.threadTop}>
+          <Text style={[styles.threadTitle, item.unreadCount > 0 && styles.threadTitleBold]}>
+            Conversation {threads.length - index}
+          </Text>
+          <Text style={styles.threadDate}>{formatDate(item.createdAt)}</Text>
+        </View>
+        <View style={styles.threadBottom}>
+          <Text
+            style={[styles.threadPreview, item.unreadCount > 0 && styles.threadPreviewBold]}
+            numberOfLines={1}
+          >
+            {item.preview || "Tap to view conversation"}
+          </Text>
+          {item.unreadCount > 0 && (
+            <View style={styles.unreadBadge}>
+              <Text style={styles.unreadText}>{item.unreadCount}</Text>
+            </View>
+          )}
+        </View>
       </View>
-    </View>
 
-    <Ionicons name="chevron-forward" size={16} color="#D1D5DB" style={{ marginLeft: 8 }} />
-  </TouchableOpacity>
-);
+      <Ionicons name="chevron-forward" size={16} color="#D1D5DB" style={{ marginLeft: 8 }} />
+    </TouchableOpacity>
+  );
 
+  // ── JSX ─────────────────────────────────────────────────────
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={PRIMARY} />
 
-      {/* Header */}
       <View style={[styles.header, { backgroundColor: PRIMARY }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.headerBtn}>
           <Ionicons name="arrow-back-outline" size={20} color="#fff" />
@@ -334,13 +306,11 @@ const startNewChat = () => {
             </Text>
           </View>
         </View>
-        {/* New chat button */}
         <TouchableOpacity style={styles.newChatBtn} onPress={startNewChat}>
           <Ionicons name="add" size={22} color="#fff" />
         </TouchableOpacity>
       </View>
 
-      {/* Conversations label */}
       <View style={styles.sectionLabel}>
         <Text style={styles.sectionLabelText}>Conversations</Text>
         {threads.length > 0 && (
@@ -350,7 +320,6 @@ const startNewChat = () => {
         )}
       </View>
 
-      {/* Thread list */}
       {loading ? (
         <View style={styles.loadingWrap}>
           <ActivityIndicator size="large" color={PRIMARY} />
@@ -361,7 +330,9 @@ const startNewChat = () => {
           data={threads}
           keyExtractor={(item) => String(item.id)}
           renderItem={renderThread}
-          contentContainerStyle={threads.length === 0 ? { flex: 1 } : { padding: 14, gap: 10 }}
+          contentContainerStyle={
+            threads.length === 0 ? { flex: 1 } : { padding: 14, gap: 10 }
+          }
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -388,7 +359,6 @@ const startNewChat = () => {
         />
       )}
 
-      {/* Floating + button (when threads exist) */}
       {threads.length > 0 && (
         <TouchableOpacity style={styles.fab} onPress={startNewChat} activeOpacity={0.85}>
           <Ionicons name="add" size={28} color="#fff" />
@@ -487,7 +457,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 4,
   },
-  threadTitle: { fontSize: 14, fontWeight: "700", color: "#1F2937" },
+  threadTitle: { fontSize: 14, fontWeight: "600", color: "#1F2937" },
+  threadTitleBold: { fontWeight: "800" },
   threadDate: { fontSize: 11, color: "#9CA3AF" },
   threadBottom: {
     flexDirection: "row",
@@ -495,6 +466,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   threadPreview: { fontSize: 13, color: "#6B7280", flex: 1 },
+  threadPreviewBold: { color: "#111827", fontWeight: "700" },
   unreadBadge: {
     backgroundColor: PRIMARY,
     borderRadius: 10,
