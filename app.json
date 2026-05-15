@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "backgroundColor": "#0047AB",
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -14,7 +14,11 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.misexecutive.SchoolApp",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -24,15 +28,16 @@
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "backgroundColor": "#0047AB",
-      "statusBar": {
-        "backgroundColor": "#0047AB",
-        "barStyle": "light-content",
-        "translucent": false
-      },
-      "navigationBar": {
-        "backgroundColor": "#0047AB",
-        "barStyle": "light-content"
-      }
+      "package": "com.misexecutive.SchoolApp"
+    },
+    "androidStatusBar": {
+      "backgroundColor": "#0047AB",
+      "barStyle": "light-content",
+      "translucent": false
+    },
+    "androidNavigationBar": {
+      "backgroundColor": "#0047AB",
+      "barStyle": "light-content"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -40,7 +45,14 @@
     "plugins": [
       "expo-router",
       "expo-web-browser",
-      "expo-video"
-    ]
+      "expo-video",
+      "expo-font"
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "a9195293-1e58-440d-9e1d-ebe49511ce03"
+      }
+    }
   }
 }
