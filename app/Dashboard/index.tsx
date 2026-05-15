@@ -55,13 +55,16 @@ export default function DashboardScreen() {
     fetchAndCountNotifications();
   }, []);
 
-  useFocusEffect(
-    React.useCallback(() => {
-      loadStoredNotifications().then((stored) => {
-        setUnreadCount(stored.filter((n) => !n.read).length);
-      });
-    }, [])
-  );
+useFocusEffect(
+  React.useCallback(() => {
+    // Only load stored if we already have fresh data (after first fetch)
+    // Don't show stale count before fetch completes
+    loadStoredNotifications().then((stored) => {
+      const freshCount = stored.filter((n) => !n.read).length;
+      setUnreadCount(freshCount);
+    });
+  }, [])
+);
 
   useEffect(() => {
     if (childId && childName && classname && sectionname) {
@@ -72,14 +75,16 @@ export default function DashboardScreen() {
     }
   }, [childId, childName, classname, sectionname]);
 
-  const fetchAndCountNotifications = async () => {
-    try {
-      const notifications: AppNotification[] = await aggregateAndStoreNotifications();
-      setUnreadCount(notifications.filter((n) => !n.read).length);
-    } catch (err) {
-      console.error("Dashboard notification fetch error:", err);
-    }
-  };
+const fetchAndCountNotifications = async () => {
+  try {
+    setUnreadCount(0); // reset before fetch so stale count never shows
+    const notifications: AppNotification[] = await aggregateAndStoreNotifications();
+    setUnreadCount(notifications.filter((n) => !n.read).length);
+  } catch (err) {
+    console.error("Dashboard notification fetch error:", err);
+    setUnreadCount(0);
+  }
+};
 
   const fetchYears = async () => {
     try {
@@ -101,12 +106,15 @@ export default function DashboardScreen() {
     }
   };
 
-  const handleYearChange = async (yearId: number) => {
-    setSelectedYearId(yearId);
-    const y = years.find((yr) => yr.id === yearId);
-    await AsyncStorage.setItem("selectedYearId",    String(yearId));
-    await AsyncStorage.setItem("selectedYearLabel", y?.year ?? String(yearId));
-  };
+const handleYearChange = async (yearId: number) => {
+  setSelectedYearId(yearId);
+  const y = years.find((yr) => yr.id === yearId);
+  await AsyncStorage.setItem("selectedYearId",    String(yearId));
+  await AsyncStorage.setItem("selectedYearLabel", y?.year ?? String(yearId));
+  
+  // Re-fetch notifications for the new year immediately
+  await fetchAndCountNotifications();
+};
 
   const handleLogout = () => {
     setSidebarOpen(false);

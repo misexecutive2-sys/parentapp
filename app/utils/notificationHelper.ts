@@ -191,6 +191,9 @@ export const loadStoredNotifications = async (): Promise<AppNotification[]> => {
 };
 
 // ─── Clear all notification data (call on logout) ─────────
+// ─── Clear all notification data (call on logout) ─────────
 export const clearNotificationData = async (): Promise<void> => {
-  await AsyncStorage.multiRemove([NOTIF_KEY, READ_IDS_KEY]);
+  // Only clear the notification list, NOT the read IDs
+  // This way read state persists across logout/login
+  await AsyncStorage.removeItem(NOTIF_KEY);
 };

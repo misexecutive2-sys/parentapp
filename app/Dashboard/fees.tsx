@@ -1107,6 +1107,7 @@ function StudentFeesScreen({ student, onBack }: { student: Student; onBack: () =
         if (res8.status === "fulfilled") {
           const fullLedger: LedgerFull[] = res8.value.ledger ?? res8.value.data ?? [];
           setLedger(fullLedger.length > 0 ? fullLedger : (d.ledger ?? []));
+          console.log("Fetched ledger from API 8:", fullLedger);
         } else {
           setLedger(d.ledger ?? []);
         }
