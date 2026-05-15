@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback ,useEffect} from "react";
 import {
   View,
   Text,
@@ -10,9 +10,11 @@ import {
   StatusBar,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
+import { useRouter, useLocalSearchParams, useFocusEffect  } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+
 
 const BASE_URL = "https://connect.schoolaid.in";
 const PRIMARY = "#0047AB";
@@ -57,79 +59,152 @@ export default function ThreadListScreen() {
   const [token, setToken] = useState("");
 
   // ── Fetch threads ──────────────────────────────────────────
-  const fetchThreads = useCallback(async (t: string): Promise<ThreadItem[]> => {
+const fetchThreads = useCallback(async (t: string): Promise<ThreadItem[]> => {
+  try {
+    const yearId = (await AsyncStorage.getItem("selectedYearId")) ?? "16";
+    let serverThreads: ThreadItem[] = [];
+
     try {
-      const yearId = (await AsyncStorage.getItem("selectedYearId")) ?? "16";
-      let serverThreads: ThreadItem[] = [];
-
-      try {
-        const res = await fetch(
-          `${BASE_URL}/api/parent-notes/threads?student_id=${childId}`,
-          {
-            headers: {
-              Authorization: `Bearer ${t}`,
-              "Content-Type": "application/json",
-              "x-academic-year-id": yearId,
-            },
+      const res = await fetch(
+        `${BASE_URL}/api/parent-notes/threads?student_id=${childId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${t}`,
+            "Content-Type": "application/json",
+            "x-academic-year-id": yearId,
           },
+        },
+      );
+      if (res.ok) {
+        const data = await res.json();
+        const list: any[] = data.data ?? data ?? [];
+
+        // For each thread fetch its messages to get latest message + unread count
+        const threadsWithDetails = await Promise.all(
+          list.map(async (th: any) => {
+            const threadId = Number(th.id ?? th.thread_id);
+            try {
+              const msgRes = await fetch(
+                `${BASE_URL}/api/parent-notes/threads/${threadId}/messages`,
+                {
+                  headers: {
+                    Authorization: `Bearer ${t}`,
+                    "Content-Type": "application/json",
+                    "x-academic-year-id": yearId,
+                  },
+                },
+              );
+              if (msgRes.ok) {
+                const msgData = await msgRes.json();
+                const msgs: any[] = msgData.data ?? msgData ?? [];
+
+                // Sort messages by date
+                msgs.sort(
+                  (a, b) =>
+                    new Date(a.created_at ?? a.createdAt).getTime() -
+                    new Date(b.created_at ?? b.createdAt).getTime(),
+                );
+
+                const lastMsg = msgs[msgs.length - 1];
+
+                // Count unread — messages from teacher that are not read
+                const unreadCount = msgs.filter(
+                  (m) => m.sender_type === "teacher" && !m.is_read,
+                ).length;
+
+                // Build preview text
+                let preview = "Tap to view conversation";
+                if (lastMsg) {
+                  if (lastMsg.message || lastMsg.text) {
+                    try {
+                      preview = decodeURIComponent(
+                        lastMsg.message ?? lastMsg.text ?? "",
+                      );
+                    } catch {
+                      preview = lastMsg.message ?? lastMsg.text ?? "";
+                    }
+                  } else if (lastMsg.attachment_url) {
+                    const ext =
+                      lastMsg.attachment_name
+                        ?.split(".")
+                        .pop()
+                        ?.toLowerCase() ?? "";
+                    if (["jpg", "jpeg", "png", "gif", "webp"].includes(ext))
+                      preview = "📷 Photo";
+                    else if (ext === "mp4" || lastMsg.attachment_name?.includes("video_"))
+                      preview = "🎥 Video";
+                    else if (ext === "m4a" || lastMsg.attachment_name?.includes("voice_"))
+                      preview = "🎙️ Voice note";
+                    else preview = "📎 File";
+                  }
+                }
+
+                return {
+                  id: threadId,
+                  preview,
+                  // Use last message date for sorting (WhatsApp style)
+                  createdAt: lastMsg
+                    ? (lastMsg.created_at ?? lastMsg.createdAt ?? th.created_at ?? new Date().toISOString())
+                    : (th.created_at ?? th.createdAt ?? new Date().toISOString()),
+                  unreadCount,
+                };
+              }
+            } catch {}
+
+            // Fallback if message fetch fails
+            return {
+              id: threadId,
+              preview: th.last_message ?? th.preview ?? "Tap to view conversation",
+              createdAt: th.created_at ?? th.createdAt ?? new Date().toISOString(),
+              unreadCount: th.unread_count ?? 0,
+            };
+          }),
         );
-        if (res.ok) {
-          const data = await res.json();
-          const list: any[] = data.data ?? data ?? [];
-          serverThreads = list.map((th: any) => ({
-            id: Number(th.id ?? th.thread_id),
-            preview: th.last_message ?? th.preview ?? "Tap to view conversation",
-            createdAt: th.created_at ?? th.createdAt ?? new Date().toISOString(),
-            unreadCount: th.unread_count ?? 0,
-          }));
-        }
-      } catch {}
 
-      // Merge with local cache
-      const savedRaw = await AsyncStorage.getItem(`allThreadIds_${childId}`);
-      const localIds: number[] = savedRaw ? JSON.parse(savedRaw) : [];
-      const serverIds = serverThreads.map((th) => th.id);
-      const missingIds = localIds.filter((id) => !serverIds.includes(id));
-      const previewsRaw = await AsyncStorage.getItem(`threadPreviews_${childId}`);
-      const savedPreviews: Record<number, { preview: string; createdAt: string }> =
-        previewsRaw ? JSON.parse(previewsRaw) : {};
-      const missingThreads: ThreadItem[] = missingIds.map((id) => ({
-        id,
-        preview: savedPreviews[id]?.preview ?? "Tap to view conversation",
-        createdAt: savedPreviews[id]?.createdAt ?? new Date().toISOString(),
-      }));
+        serverThreads = threadsWithDetails;
+      }
+    } catch {}
 
-      const allThreads = [...serverThreads, ...missingThreads].sort(
-        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-      );
+    // Merge with local cache
+    const savedRaw = await AsyncStorage.getItem(`allThreadIds_${childId}`);
+    const localIds: number[] = savedRaw ? JSON.parse(savedRaw) : [];
+    const serverIds = serverThreads.map((th) => th.id);
+    const missingIds = localIds.filter((id) => !serverIds.includes(id));
+    const previewsRaw = await AsyncStorage.getItem(`threadPreviews_${childId}`);
+    const savedPreviews: Record<number, { preview: string; createdAt: string }> =
+      previewsRaw ? JSON.parse(previewsRaw) : {};
+    const missingThreads: ThreadItem[] = missingIds.map((id) => ({
+      id,
+      preview: savedPreviews[id]?.preview ?? "Tap to view conversation",
+      createdAt: savedPreviews[id]?.createdAt ?? new Date().toISOString(),
+    }));
 
-      // Persist merged IDs
-      await AsyncStorage.setItem(
-        `allThreadIds_${childId}`,
-        JSON.stringify(allThreads.map((th) => th.id)),
-      );
+    const allThreads = [...serverThreads, ...missingThreads].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
 
-      setThreads(allThreads);
-      return allThreads;
-    } catch {
-      return [];
-    }
-  }, [childId]);
+    await AsyncStorage.setItem(
+      `allThreadIds_${childId}`,
+      JSON.stringify(allThreads.map((th) => th.id)),
+    );
+
+    setThreads(allThreads);
+    return allThreads;
+  } catch {
+    return [];
+  }
+}, [childId]);
 
   // ── Init ───────────────────────────────────────────────────
-  useFocusEffect(
-    useCallback(() => {
-      const init = async () => {
-        setLoading(true);
-        const t = await AsyncStorage.getItem("token");
-        if (!t) return;
-        setToken(t);
-        await fetchThreads(t);
-        setLoading(false);
-      };
-      init();
-    }, [childId]),
-  );
+// Auto-poll every 10 seconds for new messages (WhatsApp style)
+
+useEffect(() => {
+  if (!token) return;
+  const interval = setInterval(async () => {
+    await fetchThreads(token);
+  }, 10000);
+  return () => clearInterval(interval);
+}, [token]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -137,69 +212,107 @@ export default function ThreadListScreen() {
     setRefreshing(false);
   };
 
-  // ── Navigate to chat ───────────────────────────────────────
-  const openThread = (threadId: number) => {
-    router.push({
-      pathname: "/Dashboard/message/[threadId]",
-      params: {
-        threadId: String(threadId),
-        childId,
-        childName,
-        classname,
-        sectionname,
-      },
-    });
-  };
+const openThread = (threadId: number) => {
+  router.push({
+    pathname: "/Dashboard/message/[threadId]",
+    params: {
+      threadId: String(threadId),
+      childId,
+      childName,
+      classname,
+      sectionname,
+    },
+  });
+};
 
-  // ── Start new chat ─────────────────────────────────────────
-  const startNewChat = () => {
-    router.push({
-      pathname: "/Dashboard/message/[threadId]",
-      params: {
-        threadId: "new",
-        childId,
-        childName,
-        classname,
-        sectionname,
-      },
-    });
-  };
+const startNewChat = () => {
+  router.push({
+    pathname: "/Dashboard/message/[threadId]",
+    params: {
+      threadId: "new",
+      childId,
+      childName,
+      classname,
+      sectionname,
+    },
+  });
+};
 
   // ── Render thread row ──────────────────────────────────────
+  // const renderThread = ({ item, index }: { item: ThreadItem; index: number }) => (
+  //   <TouchableOpacity
+  //     style={styles.threadRow}
+  //     onPress={() => openThread(item.id)}
+  //     activeOpacity={0.75}
+  //   >
+  //     {/* Avatar */}
+  //     <View style={styles.avatar}>
+  //       <Ionicons name="chatbubble-ellipses" size={22} color={PRIMARY} />
+  //     </View>
+
+  //     {/* Content */}
+  //     <View style={{ flex: 1, minWidth: 0 }}>
+  //       <View style={styles.threadTop}>
+  //         <Text style={styles.threadTitle}>
+  //           Conversation {threads.length - index}
+  //         </Text>
+  //         <Text style={styles.threadDate}>{formatDate(item.createdAt)}</Text>
+  //       </View>
+  //       <View style={styles.threadBottom}>
+  //         <Text style={styles.threadPreview} numberOfLines={1}>
+  //           {item.preview || "Tap to view conversation"}
+  //         </Text>
+  //         {!!item.unreadCount && item.unreadCount > 0 && (
+  //           <View style={styles.unreadBadge}>
+  //             <Text style={styles.unreadText}>{item.unreadCount}</Text>
+  //           </View>
+  //         )}
+  //       </View>
+  //     </View>
+
+  //     <Ionicons name="chevron-forward" size={16} color="#D1D5DB" style={{ marginLeft: 8 }} />
+  //   </TouchableOpacity>
+  // );
+
   const renderThread = ({ item, index }: { item: ThreadItem; index: number }) => (
-    <TouchableOpacity
-      style={styles.threadRow}
-      onPress={() => openThread(item.id)}
-      activeOpacity={0.75}
-    >
-      {/* Avatar */}
-      <View style={styles.avatar}>
-        <Ionicons name="chatbubble-ellipses" size={22} color={PRIMARY} />
-      </View>
+  <TouchableOpacity
+    style={styles.threadRow}
+    onPress={() => {
+      console.log("🔴 TAPPED thread id:", item.id);
+      console.log("🔴 childId:", childId);
+      console.log("🔴 childName:", childName);
+      openThread(item.id);
+    }}
+    activeOpacity={0.75}
+  >
+    {/* Avatar */}
+    <View style={styles.avatar}>
+      <Ionicons name="chatbubble-ellipses" size={22} color={PRIMARY} />
+    </View>
 
-      {/* Content */}
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <View style={styles.threadTop}>
-          <Text style={styles.threadTitle}>
-            Conversation {threads.length - index}
-          </Text>
-          <Text style={styles.threadDate}>{formatDate(item.createdAt)}</Text>
-        </View>
-        <View style={styles.threadBottom}>
-          <Text style={styles.threadPreview} numberOfLines={1}>
-            {item.preview || "Tap to view conversation"}
-          </Text>
-          {!!item.unreadCount && item.unreadCount > 0 && (
-            <View style={styles.unreadBadge}>
-              <Text style={styles.unreadText}>{item.unreadCount}</Text>
-            </View>
-          )}
-        </View>
+    {/* Content */}
+    <View style={{ flex: 1, minWidth: 0 }}>
+      <View style={styles.threadTop}>
+        <Text style={styles.threadTitle}>
+          Conversation {threads.length - index}
+        </Text>
+        <Text style={styles.threadDate}>{formatDate(item.createdAt)}</Text>
       </View>
+      <View style={styles.threadBottom}>
+        <Text style={styles.threadPreview} numberOfLines={1}>
+          {item.preview || "Tap to view conversation"}
+        </Text>
+        {!!item.unreadCount && item.unreadCount > 0 && (
+          <View style={styles.unreadBadge}>
+            <Text style={styles.unreadText}>{item.unreadCount}</Text>
+          </View>
+        )}
+      </View>
+    </View>
 
-      <Ionicons name="chevron-forward" size={16} color="#D1D5DB" style={{ marginLeft: 8 }} />
-    </TouchableOpacity>
-  );
+    <Ionicons name="chevron-forward" size={16} color="#D1D5DB" style={{ marginLeft: 8 }} />
+  </TouchableOpacity>
+);
 
   return (
     <SafeAreaView style={styles.safe}>

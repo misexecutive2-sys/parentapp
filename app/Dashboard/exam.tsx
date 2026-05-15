@@ -1213,7 +1213,7 @@ export default function ExamResultsScreen() {
           
           {/* Avatar Circle with Initials */}
           <View style={styles.avatarContainer}>
-            <View style={[styles.avatarCircle, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+            <View style={[styles.avatarCircle, { backgroundColor: 'rgba(241, 26, 26, 0.2)' }]}>
               <Text style={styles.avatarInitials}>{getInitials(childName)}</Text>
             </View>
             <View style={styles.headerTextContainer}>
